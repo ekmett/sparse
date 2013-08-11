@@ -89,14 +89,12 @@ instance G.Vector v a => At (Mat v a) where
     Just j
       | i == j -> indexed f i (Just (vs G.! l)) <&> \mv -> case mv of
         Just v  -> m { _matBody = H.V ks (vs G.// [(l,v)]) }
-        Nothing  -> undefined -- delete
+        Nothing  -> undefined -- TODO: delete
     _ -> indexed f i Nothing <&> \mv -> case mv of
-        Just _v -> undefined -- insert v
+        Just _v -> undefined -- TODO: insert v
         Nothing -> m
     where l = search (\j -> (ks U.! j) >= i) 0 (U.length ks)
   {-# INLINE at #-}
-
--- insert :: (PrimMonad m, G.MVector v e) => (e -> e -> Ordering) -> v (PrimState m) e -> Int -> e -> Int -> m ()
 
 instance Eq0 (Mat v a) where
   isZero = H.null . _matBody
