@@ -1,0 +1,46 @@
+name:          sparse
+category:      Data, Vector
+version:       0.1.1
+license:       BSD3
+cabal-version: >= 1.6
+license-file:  LICENSE
+author:        Edward A. Kmett
+maintainer:    Edward A. Kmett <ekmett@gmail.com>
+stability:     experimental
+homepage:      http://github.com/ekmett/sparse
+bug-reports:   http://github.com/ekmett/sparse/issues
+copyright:     Copyright (C) 2013 Edward A. Kmett
+build-type:    Simple
+synopsis:      A playground of sparse linear algebra primitives using Morton ordering
+extra-source-files:
+  .ghci
+  .travis.yml
+  .gitignore
+  .vim.custom
+description: A playground of sparse linear algebra primitives using Morton ordering
+
+source-repository head
+  type: git
+  location: git://github.com/ekmett/sparse.git
+
+library
+  build-depends:
+    base              >= 4    && < 5,
+    bits              >= 0.3  && < 0.4,
+    deepseq           >= 1.1  && < 1.4,
+    lens              >= 3.9  && < 4,
+    primitive         >= 0.5  && < 0.6,
+    vector            >= 0.10 && < 0.11,
+    vector-algorithms >= 0.5  && < 0.6,
+    hybrid-vectors    >= 0.1  && < 1
+
+  hs-source-dirs: src
+
+  exposed-modules:
+    Sparse.Key
+    Sparse.Matrix
+
+  ghc-options: -Wall -O2
+
+  if impl(ghc<6.13)
+    Ghc-Options: -finline-if-enough-args -fno-method-sharing
