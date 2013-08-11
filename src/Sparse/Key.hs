@@ -33,27 +33,46 @@ import Data.Word
 newtype Key = Key Word64
   deriving (Eq, S.Storable, P.Prim, U.Unbox, GM.MVector UM.MVector, G.Vector U.Vector)
 
+shuffled :: Iso' Key Word64
+shuffled = iso shuffle unshuffle
+
 -- | This should be order preserving
 shuffle :: Key -> Word64
 shuffle (Key k0) = k5 where
-  t0 = (k0 `xor` shiftR k0 16) .&. 0x00000000FFFF0000
-  k1 = k0 `xor` t0 `xor` shiftL t0 16
-  t1 = (k1 `xor` shiftR k1 8) .&. 0x0000FF000000FF00
-  k2 = k1 `xor` t1 `xor` shiftL t1 8
-  t2 = (k2 `xor` shiftR k2 4) .&. 0x00F000F000F000F0
-  k3 = k2 `xor` t2 `xor` shiftL t2 4
-  t3 = (k3 `xor` shiftR k3 2) .&. 0x0C0C0C0C0C0C0C0C
-  k4 = k3 `xor` t3 `xor` shiftL t3 2
-  t4 = (k4 `xor` shiftR k4 1) .&. 0x2222222222222222
-  k5 = k4 `xor` t4 `xor` shiftL t4 1
+  t0 = xor k0 (unsafeShiftR k0 16) .&. 0x00000000FFFF0000
+  k1 = k0 `xor` t0 `xor` unsafeShiftL t0 16
+  t1 = xor k1 (unsafeShiftR k1 8 ) .&. 0x0000FF000000FF00
+  k2 = k1 `xor` t1 `xor` unsafeShiftL t1 8
+  t2 = xor k2 (unsafeShiftR k2 4 ) .&. 0x00F000F000F000F0
+  k3 = k2 `xor` t2 `xor` unsafeShiftL t2 4
+  t3 = xor k3 (unsafeShiftR k3 2 ) .&.  0x0C0C0C0C0C0C0C0C
+  k4 = k3 `xor` t3 `xor` unsafeShiftL t3 2
+  t4 = xor k4 (unsafeShiftR k4 1 ) .&. 0x2222222222222222
+  k5 = k4 `xor` t4 `xor` unsafeShiftL t4 1
 
-{-
-  k1 = shiftL (k0 .&. 0x00000000FFFF0000) 16 .|. shiftR k0 16 .&. 0x00000000FFFF0000 .|. k0 .&. 0xFFFF00000000FFFF
-  k2 = shiftL (k1 .&. 0x0000FF000000FF00) 8  .|. shiftR k1 8  .&. 0x0000FF000000FF00 .|. k1 .&. 0xFF0000FFFF0000FF
-  k3 = shiftL (k2 .&. 0x00F000F000F000F0) 4  .|. shiftR k2 4  .&. 0x00F000F000F000F0 .|. k2 .&. 0xF00FF00FF00FF00F
-  k4 = shiftL (k3 .&. 0x0C0C0C0C0C0C0C0C) 2  .|. shiftR k3 2  .&. 0x0C0C0C0C0C0C0C0C .|. k3 .&. 0xC3C3C3C3C3C3C3C3
-  k5 = shiftL (k4 .&. 0x2222222222222222) 1  .|. shiftR k4 1  .&. 0x2222222222222222 .|. k4 .&. 0x9999999999999999
--}
+unshuffle :: Word64 -> Key
+unshuffle k0 = Key k5 where
+  t0 = xor k0 (unsafeShiftR k0 1 ) .&. 0x2222222222222222
+  k1 = k0 `xor` t0 `xor` unsafeShiftL t0 1
+  t1 = xor k1 (unsafeShiftR k1 2 ) .&. 0x0C0C0C0C0C0C0C0C
+  k2 = k1 `xor` t1 `xor` unsafeShiftL t1 2
+  t2 = xor k2 (unsafeShiftR k2 4 ) .&. 0x00F000F000F000F0
+  k3 = k2 `xor` t2 `xor` unsafeShiftL t2 4
+  t3 = xor k3 (unsafeShiftR k3 8 ) .&. 0x0000FF000000FF00
+  k4 = k3 `xor` t3 `xor` unsafeShiftL t3 8
+  t4 = xor k4 (unsafeShiftR k4 16) .&. 0x00000000FFFF0000
+  k5 = k4 `xor` t4 `xor` unsafeShiftL t4 16
+
+-- these are expensive to iterate
+instance Enum Key where
+  succ k = k & shuffled +~ 1
+  pred k = k & shuffled -~ 1
+  fromEnum k = fromIntegral (k^.shuffled)
+  toEnum i = fromIntegral i^.from shuffled
+  enumFrom i = enumFrom (i^.shuffled)^..folded.from shuffled
+  enumFromTo i j = enumFromTo (i^.shuffled) (j^.shuffled)^..folded.from shuffled
+  enumFromThen i j = enumFromThen (i^.shuffled) (j^.shuffled)^..folded.from shuffled
+  enumFromThenTo i j k = enumFromThenTo (i^.shuffled) (j^.shuffled) (k^.shuffled)^..folded.from shuffled
 
 -- xor (b .&. (b - 1)) b -- should be the least significant set bit, can we abuse these to figure out succ?
 
@@ -71,7 +90,7 @@ instance Read Key where
     ]
 
 key :: Word32 -> Word32 -> Key
-key i j = Key $ shiftL (fromIntegral i) 32 .|. fromIntegral j
+key i j = Key $ unsafeShiftL (fromIntegral i) 32 .|. fromIntegral j
 {-# INLINE key #-}
 
 raw :: Iso' Key Word64
@@ -85,7 +104,7 @@ hi = 0xffffffff00000000
 {-# INLINE hi #-}
 
 _i, _j :: Lens' Key Word32
-_i f (Key w) = (\i -> Key $ shiftL (fromIntegral i) 32 .|. (w .&. lo)) <$> f (fromIntegral (shiftR w 32))
+_i f (Key w) = (\i -> Key $ unsafeShiftL (fromIntegral i) 32 .|. (w .&. lo)) <$> f (fromIntegral (unsafeShiftR w 32))
 _j f (Key w) = (\j -> Key $ (w .&. hi) .|. fromIntegral j) <$> f (fromIntegral w)
 {-# INLINE _i #-}
 {-# INLINE _j #-}
@@ -95,9 +114,9 @@ instance Ord Key where
     | xac < xbd && xac < xor xac xbd = compare b d
     | otherwise = compare a c
     where
-      a = shiftR ab 32
+      a = unsafeShiftR ab 32
       b = ab .&. lo
-      c = shiftR cd 32
+      c = unsafeShiftR cd 32
       d = cd .&. lo
       xac = xor a c
       xbd = xor b d
