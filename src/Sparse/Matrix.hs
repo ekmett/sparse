@@ -16,21 +16,20 @@ import Control.Applicative
 import Control.Lens
 import Control.Monad.Primitive
 import Data.Bits
-import Data.Bits.Lens
 import Data.Bits.Extras
 import Data.Foldable
 import Data.Function (on)
 import qualified Data.Vector.Algorithms.Intro as Intro
-import qualified Data.Vector as B
+-- import qualified Data.Vector as B
 import Data.Vector.Fusion.Stream.Monadic (Step(..), Stream(..))
 import Data.Vector.Fusion.Stream.Size
 import qualified Data.Vector.Generic as G
 import qualified Data.Vector.Generic.Mutable as GM
 import qualified Data.Vector.Hybrid as H
 import qualified Data.Vector.Hybrid.Internal as H
-import qualified Data.Vector.Primitive as P
+-- import qualified Data.Vector.Primitive as P
 import qualified Data.Vector.Unboxed as U
-import qualified Data.Vector.Unboxed.Mutable as UM
+-- import qualified Data.Vector.Unboxed.Mutable as UM
 import Data.Word
 import Sparse.Key
 -- import Debug.Trace
@@ -69,9 +68,11 @@ instance Functor v => Functor (Mat v) where
 
 instance Foldable v => Foldable (Mat v) where
   foldMap = foldMapOf (matBody.values.folded)
+  {-# INLINE foldMap #-}
 
 instance Traversable v => Traversable (Mat v) where
   traverse = matBody.values.traverse
+  {-# INLINE traverse #-}
 
 type instance IxValue (Mat v a) = a
 type instance Index (Mat v a) = Key
@@ -82,6 +83,7 @@ instance (Applicative f, G.Vector v a) => Ixed f (Mat v a) where
     | Just j <- ks U.!? l, i == j = indexed f i (vs G.! l) <&> \v' -> m { _matBody = H.V ks (vs G.// [(l,v')]) }
     | otherwise           = pure m
     where l = search (\j -> (ks U.! j) >= i) 0 (U.length ks)
+  {-# INLINE ix #-}
 
 instance G.Vector v a => At (Mat v a) where
   at i f m@Mat{_matBody = H.V ks vs} = case ks U.!? l of
@@ -90,9 +92,10 @@ instance G.Vector v a => At (Mat v a) where
         Just v  -> m { _matBody = H.V ks (vs G.// [(l,v)]) }
         Nothing  -> undefined -- delete
     _ -> indexed f i Nothing <&> \mv -> case mv of
-        Just v -> undefined -- insert v
+        Just _v -> undefined -- insert v
         Nothing -> m
     where l = search (\j -> (ks U.! j) >= i) 0 (U.length ks)
+  {-# INLINE at #-}
 
 -- insert :: (PrimMonad m, G.MVector v e) => (e -> e -> Ordering) -> v (PrimState m) e -> Int -> e -> Int -> m ()
 
@@ -100,9 +103,12 @@ instance Eq0 (Mat v a) where
   isZero = H.null . _matBody
   {-# INLINE isZero #-}
 
+{-
 mask :: Int -> Word64
 mask lzs = complement (k0 .|. shiftL k0 32)
   where k0 = bit (32-lzs) - 1
+{-# INLINE mask #-}
+-}
 
 -- Build a sparse (h * w) a-valued matrix.
 fromList :: G.Vector v a => Word32 -> Word32 -> [(Key, a)] -> Mat v a
@@ -164,7 +170,7 @@ multiply x y
   | count x == 1 -- each side has a single entry, so we might as well solve for it!
   , count y == 1
   , (ij,xij) <- H.head (matBody x)
-  , (jk,yjk) <- H.head (matBody y) = if ij^._jj == jk^._ii then singleton h w (jk&_i.~ij^._i) (xij*yjk) else zero h w
+  , (jk,yjk) <- H.head (matBody y) = if ij^._jj == jk^._ii then singleton h w (jk&_1.~ij^._1) (xij*yjk) else zero h w
   | (x00,x01,x10,x11) <- quadrants x
   , (y00,y01,y11,y11) <- quadrants y
   where
@@ -219,8 +225,8 @@ mergeVectorsWith f va vb = G.unstream (mergeStreamsWith f (G.stream va) (G.strea
 
 -- subject to stream fusion
 mergeStreamsWith :: (Monad m, Ord i) => (a -> a -> Maybe a) -> Stream m (i, a) -> Stream m (i, a) -> Stream m (i, a)
-mergeStreamsWith f (Stream stepa sa na) (Stream stepb sb nb)
-  = Stream step (MergeStart sa sb) (toMax na + toMax nb) where
+mergeStreamsWith f (Stream stepa sa0 na) (Stream stepb sb0 nb)
+  = Stream step (MergeStart sa0 sb0) (toMax na + toMax nb) where
   {-# INLINE [0] step #-}
   step (MergeStart sa sb) = do
     r <- stepa sa
@@ -278,8 +284,8 @@ data ConcatFourState sa sb sc sd
   | C1          sd
 
 concatFour :: Monad m => Stream m a -> Stream m a -> Stream m a -> Stream m a -> Stream m a
-concatFour (Stream stepa sa na) (Stream stepb sb nb) (Stream stepc sc nc) (Stream stepd sd nd)
-  = Stream step (C4 sa sb sc sd) (na + nb + nc + nd) where
+concatFour (Stream stepa sa0 na) (Stream stepb sb0 nb) (Stream stepc sc0 nc) (Stream stepd sd0 nd)
+  = Stream step (C4 sa0 sb0 sc0 sd0) (na + nb + nc + nd) where
   {-# INLINE [0] step #-}
   step (C4 sa sb sc sd) = do
     r <- stepa sa

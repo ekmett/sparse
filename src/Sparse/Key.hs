@@ -13,11 +13,9 @@ module Sparse.Key
   , key
   , shuffled
   , unshuffled
-  , _i, _j
   , _ii, _jj
   ) where
 
-import Control.Applicative
 import Control.Lens
 import Data.Bits
 import qualified Data.Vector.Generic as G
@@ -95,14 +93,18 @@ mj = 0x5555555555555555
 {-# INLINE mj #-}
 
 -- TODO: half shuffle
-_i, _j :: Lens' Key Word32
-_i = unshuffled._1
-_j = unshuffled._2
-{-# INLINE _i #-}
-{-# INLINE _j #-}
+instance Field1 Key Key Word32 Word32 where
+  _1 = unshuffled._1
+  {-# INLINE _1 #-}
+
+instance Field2 Key Key Word32 Word32 where
+  _2 = unshuffled._2
+  {-# INLINE _2 #-}
 
 -- | Lenses for working with masked off versions of the @i@ or @j@ column.
 -- The result is spread with interleaved zeros in the odd bits.
 _ii, _jj :: Lens' Key Word64
 _jj f (Key ij) = f (ij .&. mj) <&> \j' -> Key $ (j' .&. mj) .|. ij .&. mi
 _ii f (Key ij) = f (unsafeShiftR (ij .&. mi) 1) <&> \i' -> Key $ (unsafeShiftL i' 1 .&. mi) .|. ij .&. mj
+{-# INLINE _ii #-}
+{-# INLINE _jj #-}
