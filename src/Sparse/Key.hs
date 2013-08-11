@@ -36,11 +36,24 @@ newtype Key = Key Word64
 -- | This should be order preserving
 shuffle :: Key -> Word64
 shuffle (Key k0) = k5 where
+  t0 = (k0 `xor` shiftR k0 16) .&. 0x00000000FFFF0000
+  k1 = k0 `xor` t0 `xor` shiftL t0 16
+  t1 = (k1 `xor` shiftR k1 8) .&. 0x0000FF000000FF00
+  k2 = k1 `xor` t1 `xor` shiftL t1 8
+  t2 = (k2 `xor` shiftR k2 4) .&. 0x00F000F000F000F0
+  k3 = k2 `xor` t2 `xor` shiftL t2 4
+  t3 = (k3 `xor` shiftR k3 2) .&. 0x0C0C0C0C0C0C0C0C
+  k4 = k3 `xor` t3 `xor` shiftL t3 2
+  t4 = (k4 `xor` shiftR k4 1) .&. 0x2222222222222222
+  k5 = k4 `xor` t4 `xor` shiftL t4 1
+
+{-
   k1 = shiftL (k0 .&. 0x00000000FFFF0000) 16 .|. shiftR k0 16 .&. 0x00000000FFFF0000 .|. k0 .&. 0xFFFF00000000FFFF
   k2 = shiftL (k1 .&. 0x0000FF000000FF00) 8  .|. shiftR k1 8  .&. 0x0000FF000000FF00 .|. k1 .&. 0xFF0000FFFF0000FF
   k3 = shiftL (k2 .&. 0x00F000F000F000F0) 4  .|. shiftR k2 4  .&. 0x00F000F000F000F0 .|. k2 .&. 0xF00FF00FF00FF00F
   k4 = shiftL (k3 .&. 0x0C0C0C0C0C0C0C0C) 2  .|. shiftR k3 2  .&. 0x0C0C0C0C0C0C0C0C .|. k3 .&. 0xC3C3C3C3C3C3C3C3
   k5 = shiftL (k4 .&. 0x2222222222222222) 1  .|. shiftR k4 1  .&. 0x2222222222222222 .|. k4 .&. 0x9999999999999999
+-}
 
 -- xor (b .&. (b - 1)) b -- should be the least significant set bit, can we abuse these to figure out succ?
 
@@ -78,9 +91,9 @@ _j f (Key w) = (\j -> Key $ (w .&. hi) .|. fromIntegral j) <$> f (fromIntegral w
 {-# INLINE _j #-}
 
 instance Ord Key where
-  compare (Key ab) (Key cd)
+  compare (Key ab) (Key cd) 
     | xor a c < xor b d = compare b d
-    | otherwise         = compare a c
+    | otherwise = compare a c
     where
       a = shiftR ab 32
       b = ab .&. lo
