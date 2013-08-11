@@ -27,51 +27,8 @@ import qualified Data.Vector.Primitive as P
 import qualified Data.Vector.Unboxed as U
 import qualified Data.Vector.Unboxed.Mutable as UM
 import Data.Word
+import Sparse.Key
 -- import Debug.Trace
-
--- * Morton Order
-
--- | @key i j@ packs a 32-bit @i@ and 32-bit @j@ coordinate into the upper bits and lower bits of a 64 bit machine word respectively.
---
--- Keys are sorted in \"Morton Order\" by using bit manipulation tricks.
-newtype Key = Key Word64
-  deriving (Eq, P.Prim, U.Unbox, GM.MVector UM.MVector, G.Vector U.Vector)
-
-instance Show Key where
-  showsPrec d w = showParen (d > 10) $
-    showString "key " . Prelude.showsPrec 11 (w^._i) .
-         showChar ' ' . Prelude.showsPrec 11 (w^._j)
-
-key :: Word32 -> Word32 -> Key
-key i j = Key $ shiftL (fromIntegral i) 32 .|. fromIntegral j
-{-# INLINE key #-}
-
-raw :: Iso' Key Word64
-raw = iso (\(Key a) -> a) Key
-{-# INLINE raw #-}
-
-lo, hi :: Word64
-lo = 0x00000000ffffffff
-hi = 0xffffffff00000000
-{-# INLINE lo #-}
-{-# INLINE hi #-}
-
-_i, _j :: Lens' Key Word32
-_i f (Key w) = (\i -> Key $ shiftL (fromIntegral i) 32 .|. (w .&. lo)) <$> f (fromIntegral (shiftR w 32))
-_j f (Key w) = (\j -> Key $ (w .&. hi) .|. fromIntegral j) <$> f (fromIntegral w)
-{-# INLINE _i #-}
-{-# INLINE _j #-}
-
-instance Ord Key where
-  compare (Key ab) (Key cd)
-    | xor a c < xor b d = compare b d
-    | otherwise         = compare a c
-    where
-      a = shiftR ab 32
-      b = ab .&. lo
-      c = shiftR cd 32
-      d = cd .&. lo
-  {-# INLINE compare #-}
 
 -- * Sparse Matrices
 
