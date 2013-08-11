@@ -10,7 +10,9 @@
 
 module Sparse.Key
   ( Key(..)
-  , key, raw
+  , key
+  , shuffled
+  , unshuffled
   , _i, _j
   ) where
 
@@ -27,18 +29,24 @@ import Data.Word
 
 -- * Morton Order
 
--- | @key i j@ packs a 32-bit @i@ and 32-bit @j@ coordinate into the upper bits and lower bits of a 64 bit machine word respectively.
+-- | @key i j@ interleaves the bits of the keys @i@ and @j@.
 --
--- Keys are sorted in \"Morton Order\" by using bit manipulation tricks.
-newtype Key = Key Word64
-  deriving (Eq, S.Storable, P.Prim, U.Unbox, GM.MVector UM.MVector, G.Vector U.Vector)
+-- Keys are then just values sorted in \"Morton Order\".
+newtype Key = Key { rawKey :: Word64 }
+  deriving (Eq, Ord, Enum, S.Storable, P.Prim, U.Unbox, GM.MVector UM.MVector, G.Vector U.Vector)
 
-shuffled :: Iso' Key Word64
-shuffled = iso shuffle unshuffle
+shuffled :: Iso' (Word32, Word32) Key
+shuffled = iso (uncurry key) unshuffle
+{-# INLINE shuffled #-}
+
+unshuffled :: Iso' Key (Word32, Word32)
+unshuffled = iso unshuffle (uncurry key)
+{-# INLINE unshuffled #-}
 
 -- | This should be order preserving
-shuffle :: Key -> Word64
-shuffle (Key k0) = k5 where
+key :: Word32 -> Word32 -> Key
+key i j = Key k5 where
+  k0 = unsafeShiftL (fromIntegral i) 32 .|. fromIntegral j
   t0 = xor k0 (unsafeShiftR k0 16) .&. 0x00000000FFFF0000
   k1 = k0 `xor` t0 `xor` unsafeShiftL t0 16
   t1 = xor k1 (unsafeShiftR k1 8 ) .&. 0x0000FF000000FF00
@@ -49,9 +57,10 @@ shuffle (Key k0) = k5 where
   k4 = k3 `xor` t3 `xor` unsafeShiftL t3 2
   t4 = xor k4 (unsafeShiftR k4 1 ) .&. 0x2222222222222222
   k5 = k4 `xor` t4 `xor` unsafeShiftL t4 1
+{-# INLINE key #-}
 
-unshuffle :: Word64 -> Key
-unshuffle k0 = Key k5 where
+unshuffle :: Key -> (Word32, Word32)
+unshuffle (Key k0) = (fromIntegral (unsafeShiftR k5 32), fromIntegral k5) where
   t0 = xor k0 (unsafeShiftR k0 1 ) .&. 0x2222222222222222
   k1 = k0 `xor` t0 `xor` unsafeShiftL t0 1
   t1 = xor k1 (unsafeShiftR k1 2 ) .&. 0x0C0C0C0C0C0C0C0C
@@ -62,24 +71,13 @@ unshuffle k0 = Key k5 where
   k4 = k3 `xor` t3 `xor` unsafeShiftL t3 8
   t4 = xor k4 (unsafeShiftR k4 16) .&. 0x00000000FFFF0000
   k5 = k4 `xor` t4 `xor` unsafeShiftL t4 16
-
--- these are expensive to iterate
-instance Enum Key where
-  succ k = k & shuffled +~ 1
-  pred k = k & shuffled -~ 1
-  fromEnum k = fromIntegral (k^.shuffled)
-  toEnum i = fromIntegral i^.from shuffled
-  enumFrom i = enumFrom (i^.shuffled)^..folded.from shuffled
-  enumFromTo i j = enumFromTo (i^.shuffled) (j^.shuffled)^..folded.from shuffled
-  enumFromThen i j = enumFromThen (i^.shuffled) (j^.shuffled)^..folded.from shuffled
-  enumFromThenTo i j k = enumFromThenTo (i^.shuffled) (j^.shuffled) (k^.shuffled)^..folded.from shuffled
-
--- xor (b .&. (b - 1)) b -- should be the least significant set bit, can we abuse these to figure out succ?
+{-# INLINE unshuffle #-}
 
 instance Show Key where
-  showsPrec d w = showParen (d > 10) $
-    showString "key " . Prelude.showsPrec 11 (w^._i) .
-         showChar ' ' . Prelude.showsPrec 11 (w^._j)
+  showsPrec d w = case unshuffle w of
+    (i,j) -> showParen (d > 10) $
+      showString "key " . Prelude.showsPrec 11 i .
+           showChar ' ' . Prelude.showsPrec 11 j
 
 instance Read Key where
   readsPrec d = readParen (d > 10) $ \r ->
@@ -89,35 +87,15 @@ instance Read Key where
     , (j,u) <- readsPrec 11 t
     ]
 
-key :: Word32 -> Word32 -> Key
-key i j = Key $ unsafeShiftL (fromIntegral i) 32 .|. fromIntegral j
-{-# INLINE key #-}
-
-raw :: Iso' Key Word64
-raw = iso (\(Key a) -> a) Key
-{-# INLINE raw #-}
-
 lo, hi :: Word64
 lo = 0x00000000ffffffff
 hi = 0xffffffff00000000
 {-# INLINE lo #-}
 {-# INLINE hi #-}
 
+-- TODO: half shuffle
 _i, _j :: Lens' Key Word32
-_i f (Key w) = (\i -> Key $ unsafeShiftL (fromIntegral i) 32 .|. (w .&. lo)) <$> f (fromIntegral (unsafeShiftR w 32))
-_j f (Key w) = (\j -> Key $ (w .&. hi) .|. fromIntegral j) <$> f (fromIntegral w)
+_i = unshuffled._1
+_j = unshuffled._2
 {-# INLINE _i #-}
 {-# INLINE _j #-}
-
-instance Ord Key where
-  compare (Key ab) (Key cd)
-    | xac < xbd && xac < xor xac xbd = compare b d
-    | otherwise = compare a c
-    where
-      a = unsafeShiftR ab 32
-      b = ab .&. lo
-      c = unsafeShiftR cd 32
-      d = cd .&. lo
-      xac = xor a c
-      xbd = xor b d
-  {-# INLINE compare #-}

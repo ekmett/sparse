@@ -87,16 +87,15 @@ ident w = mat 0 0 w w $ H.fromListN (fromIntegral w) [(key i i, 1) | i <- [0 .. 
 
 quadrants :: G.Vector v a => Mat v a -> (Mat v a, Mat v a, Mat v a, Mat v a)
 quadrants (Mat lzs i0 j0 h w body@(H.V ks _)) =
-  -- traceShow ([ (rawKey k .&. hmask, rawKey k .&. lmask) | k <- U.toList ks], split1, split2, split3) $
   ( m00, m01
   , m10, m11
   ) where
-    hmask = bit (63 - lzs)
-    lmask = bit (31 - lzs)
+    hmask = bit (64 - 2*lzs)
+    lmask = unsafeShiftR hmask 1
     n = U.length ks
-    split2 = search (\i -> (ks U.! i)^.raw .&. hmask /= 0) 0 n
-    split1 = search (\i -> (ks U.! i)^.raw .&. lmask /= 0) 0 split2
-    split3 = search (\i -> (ks U.! i)^.raw .&. lmask /= 0) split2 n
+    split2 = search (\i -> rawKey (ks U.! i) .&. hmask /= 0) 0 n
+    split1 = search (\i -> rawKey (ks U.! i) .&. lmask /= 0) 0 split2
+    split3 = search (\i -> rawKey (ks U.! i) .&. lmask /= 0) split2 n
     (uh,lh)   = H.splitAt split1 body
     (b00,b01) = H.splitAt split1 uh
     (b10,b11) = H.splitAt (split3 - split2) lh
@@ -104,8 +103,8 @@ quadrants (Mat lzs i0 j0 h w body@(H.V ks _)) =
     m01 = Mat lzs' i0      (j0+dw) dh     (w-dw) b01
     m10 = Mat lzs' (i0+dh) j0      (h-dh) dw     b10
     m11 = Mat lzs' (i0+dh) (j0+dh) (h-dw) (w-dw) b11
-    dh = fattest (h - 1)
-    dw = fattest (w - 1)
+    dh = fattest h
+    dw = fattest w
     lzs' = lzs + 1
 
 -- (i x j, j x k) -> (i x k)
@@ -133,13 +132,13 @@ multiply x y
 --
 -- The 2-fattest number in (a..b] is @shiftL (-1) (msb (xor a b)) .&. b@.
 fattest :: Word32 -> Word32
-fattest y0 = shiftR x5 1 + 1 where
+fattest y0 = unsafeShiftR x5 1 + 1 where
   x0 = y0 - 1
-  x1 = x0 .|. shiftR x0 1
-  x2 = x1 .|. shiftR x1 2
-  x3 = x2 .|. shiftR x2 4
-  x4 = x3 .|. shiftR x3 8
-  x5 = x4 .|. shiftR x4 16
+  x1 = x0 .|. unsafeShiftR x0 1
+  x2 = x1 .|. unsafeShiftR x1 2
+  x3 = x2 .|. unsafeShiftR x2 4
+  x4 = x3 .|. unsafeShiftR x3 8
+  x5 = x4 .|. unsafeShiftR x4 16
 
 -- | assuming @l <= h@. Returns @h@ if the predicate is never @True@ over @[l..h)@
 search :: (Int -> Bool) -> Int -> Int -> Int
