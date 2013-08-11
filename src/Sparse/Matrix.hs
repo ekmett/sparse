@@ -1,7 +1,9 @@
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE DefaultSignatures #-}
+{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeSynonymInstances #-}
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
@@ -12,11 +14,14 @@ module Sparse.Matrix where
 
 import Control.Applicative
 import Control.Lens
+import Control.Monad.Primitive
 import Data.Bits
 import Data.Bits.Lens
 import Data.Bits.Extras
+import Data.Foldable
 import Data.Function (on)
 import qualified Data.Vector.Algorithms.Intro as Intro
+import qualified Data.Vector as B
 import Data.Vector.Fusion.Stream.Monadic (Step(..), Stream(..))
 import Data.Vector.Fusion.Stream.Size
 import qualified Data.Vector.Generic as G
@@ -45,15 +50,54 @@ instance Eq0 Float
 instance Eq0 Double
 
 data Mat v a = Mat
-  { matShift                        :: {-# UNPACK #-}!Int
-  , matI, matJ, matHeight, matWidth :: {-# UNPACK #-}!Word32
-  , matBody                         :: !(H.Vector U.Vector v (Key, a))
+  { _matShift                           :: {-# UNPACK #-}!Int
+  , _matI, _matJ, _matHeight, _matWidth :: {-# UNPACK #-}!Word32
+  , _matBody                            :: !(H.Vector U.Vector v (Key, a))
   } deriving (Show)
 
--- instance G.Vector v a => Num (Mat v a) where
+makeLenses ''Mat
+
+keys :: Lens (H.Vector u v (a,b)) (H.Vector w v (c,b)) (u a) (w c)
+keys f (H.V ks vs) = f ks <&> \ks' -> H.V ks' vs
+
+values :: Lens (H.Vector u v (a,b)) (H.Vector u w (a,c)) (v b) (w c)
+values f (H.V ks vs) = f vs <&> \vs' -> H.V ks vs'
+
+instance Functor v => Functor (Mat v) where
+  fmap = over (matBody.values.mapped)
+  {-# INLINE fmap #-}
+
+instance Foldable v => Foldable (Mat v) where
+  foldMap = foldMapOf (matBody.values.folded)
+
+instance Traversable v => Traversable (Mat v) where
+  traverse = matBody.values.traverse
+
+type instance IxValue (Mat v a) = a
+type instance Index (Mat v a) = Key
+
+-- modify an entry in the matrix... if it exists.
+instance (Applicative f, G.Vector v a) => Ixed f (Mat v a) where
+  ix i f m@Mat{_matBody = H.V ks vs}
+    | Just j <- ks U.!? l, i == j = indexed f i (vs G.! l) <&> \v' -> m { _matBody = H.V ks (vs G.// [(l,v')]) }
+    | otherwise           = pure m
+    where l = search (\j -> (ks U.! j) >= i) 0 (U.length ks)
+
+instance G.Vector v a => At (Mat v a) where
+  at i f m@Mat{_matBody = H.V ks vs} = case ks U.!? l of
+    Just j
+      | i == j -> indexed f i (Just (vs G.! l)) <&> \mv -> case mv of
+        Just v  -> m { _matBody = H.V ks (vs G.// [(l,v)]) }
+        Nothing  -> undefined -- delete
+    _ -> indexed f i Nothing <&> \mv -> case mv of
+        Just v -> undefined -- insert v
+        Nothing -> m
+    where l = search (\j -> (ks U.! j) >= i) 0 (U.length ks)
+
+-- insert :: (PrimMonad m, G.MVector v e) => (e -> e -> Ordering) -> v (PrimState m) e -> Int -> e -> Int -> m ()
 
 instance Eq0 (Mat v a) where
-  isZero = H.null . matBody
+  isZero = H.null . _matBody
   {-# INLINE isZero #-}
 
 mask :: Int -> Word64
@@ -75,7 +119,7 @@ singleton h w k v
   | otherwise = mat 0 0 h w $ H.fromListN 1 [(k,v)]
 
 count :: Mat v a -> Int
-count = H.length . matBody
+count = H.length . _matBody
 {-# INLINE count #-}
 
 zero :: G.Vector v a => Word32 -> Word32 -> Mat v a
@@ -85,11 +129,15 @@ zero h w = fromList h w []
 ident :: (G.Vector v a, Num a) => Word32 -> Mat v a
 ident w = mat 0 0 w w $ H.fromListN (fromIntegral w) [(key i i, 1) | i <- [0 .. w - 1]]
 
-quadrants :: G.Vector v a => Mat v a -> (Mat v a, Mat v a, Mat v a, Mat v a)
-quadrants (Mat lzs i0 j0 h w body@(H.V ks _)) =
-  ( m00, m01
-  , m10, m11
-  ) where
+-- break into 2-fat quadrants.
+--
+-- Note: the keys have 'junk' on the top of the keys, but it should be exactly the junk we need them to have when we rejoin the quadrants
+-- @mlzs@ gives you enough information to be able to trim them otherwise.
+quadrants :: G.Vector v a => Lens' (Mat v a) (Mat v a, Mat v a, Mat v a, Mat v a)
+quadrants f (Mat lzs i0 j0 h w body@(H.V ks _)) =
+  f ( m00, m01, m10, m11) <&> \ (m00', m01', m10', m11') -> Mat lzs i0 j0 h w $
+      G.unstream $ concatFour (G.stream (_matBody m00')) (G.stream (_matBody m01')) (G.stream (_matBody m10')) (G.stream (_matBody m11'))
+  where
     hmask = bit (64 - 2*lzs)
     lmask = unsafeShiftR hmask 1
     n = U.length ks
@@ -113,11 +161,13 @@ quadrants (Mat lzs i0 j0 h w body@(H.V ks _)) =
 multiply :: G.Vector v a => Mat v a -> Mat v a -> Mat v a
 multiply x y
   | isZero x || isZero y = zero h w
-  | count x == 1 && count y == 1, (ij,xij) <- H.head (matBody x), (jk,yjk) <- H.head (matBody y) = if ij^._j == jk^._j then singleton h w (jk&_i.~ij^._i) (xij*yjk) else zero h w
-  -- at least one quadrant is non-empty, subdivide
-  | otherwise =
-  where (x00,x01,x10,x11) = quadrants x
-        (y00,y01,y11,y11) = quadrants y
+  | count x == 1 -- each side has a single entry, so we might as well solve for it!
+  , count y == 1
+  , (ij,xij) <- H.head (matBody x)
+  , (jk,yjk) <- H.head (matBody y) = if ij^._jj == jk^._ii then singleton h w (jk&_i.~ij^._i) (xij*yjk) else zero h w
+  | (x00,x01,x10,x11) <- quadrants x
+  , (y00,y01,y11,y11) <- quadrants y
+  where
         h = height x
         w = width y
 -}
@@ -150,9 +200,11 @@ search p = go where
     where m = l + div (h-l) 2
 {-# INLINE search #-}
 
+{-
 mergeMatricesWith :: (a -> a -> Maybe a) -> Mat v a -> Mat v a -> Mat v a
 mergeMatricesWith = undefined
 -- mergeMatricesWith f (Mat 
+-}
 
 plus :: (Num a, Eq a) => a -> a -> Maybe a
 plus a b = case a + b of
@@ -219,3 +271,52 @@ data MergeState sa sb i a
   | MergeRightEnded sa
   | MergeStart sa sb
 
+data ConcatFourState sa sb sc sd
+  = C4 sa sb sc sd
+  | C3    sb sc sd
+  | C2       sc sd
+  | C1          sd
+
+concatFour :: Monad m => Stream m a -> Stream m a -> Stream m a -> Stream m a -> Stream m a
+concatFour (Stream stepa sa na) (Stream stepb sb nb) (Stream stepc sc nc) (Stream stepd sd nd)
+  = Stream step (C4 sa sb sc sd) (na + nb + nc + nd) where
+  {-# INLINE [0] step #-}
+  step (C4 sa sb sc sd) = do
+    r <- stepa sa
+    return $ case r of
+      Yield a sa' -> Yield a (C4 sa' sb sc sd)
+      Skip sa'    -> Skip (C4 sa' sb sc sd)
+      Done        -> Skip (C3 sb sc sd)
+  step (C3 sb sc sd) = do
+    r <- stepb sb
+    return $ case r of
+      Yield a sb' -> Yield a (C3 sb' sc sd)
+      Skip sb'    -> Skip (C3 sb' sc sd)
+      Done        -> Skip (C2 sc sd)
+  step (C2 sc sd) = do
+    r <- stepc sc
+    return $ case r of
+      Yield a sc' -> Yield a (C2 sc' sd)
+      Skip sc'    -> Skip (C2 sc' sd)
+      Done        -> Skip (C1 sd)
+  step (C1 sd) = do
+    r <- stepd sd
+    return $ case r of
+      Yield a sd' -> Yield a (C1 sd')
+      Skip sd'    -> Skip (C1 sd')
+      Done        -> Done
+{-# INLINE [1] concatFour #-}
+
+
+-- Given a sorted array in [l,u), inserts val into its proper position,
+-- yielding a sorted [l,u]
+insert :: (PrimMonad m, GM.MVector v e) => (e -> e -> Ordering) -> v (PrimState m) e -> Int -> e -> Int -> m ()
+insert cmp a l = loop
+ where
+ loop val j
+   | j <= l    = GM.unsafeWrite a l val
+   | otherwise = do e <- GM.unsafeRead a (j - 1)
+                    case cmp val e of
+                      LT -> GM.unsafeWrite a j e >> loop val (j - 1)
+                      _  -> GM.unsafeWrite a j val
+{-# INLINE insert #-}
