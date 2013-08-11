@@ -91,12 +91,14 @@ _j f (Key w) = (\j -> Key $ (w .&. hi) .|. fromIntegral j) <$> f (fromIntegral w
 {-# INLINE _j #-}
 
 instance Ord Key where
-  compare (Key ab) (Key cd) 
-    | xor a c < xor b d = compare b d
+  compare (Key ab) (Key cd)
+    | xac < xbd && xac < xor xac xbd = compare b d
     | otherwise = compare a c
     where
       a = shiftR ab 32
       b = ab .&. lo
       c = shiftR cd 32
       d = cd .&. lo
+      xac = xor a c
+      xbd = xor b d
   {-# INLINE compare #-}
