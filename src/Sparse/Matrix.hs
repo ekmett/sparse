@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE DefaultSignatures #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
@@ -21,27 +22,24 @@ import Data.Bits.Extras
 import Data.Foldable
 import Data.Function (on)
 import qualified Data.Vector.Algorithms.Intro as Intro
--- import qualified Data.Vector as B
-import Data.Vector.Fusion.Stream.Monadic (Step(..), Stream(..))
-import Data.Vector.Fusion.Stream.Size
 import qualified Data.Vector.Generic as G
 import qualified Data.Vector.Generic.Mutable as GM
 import qualified Data.Vector.Hybrid as H
 import qualified Data.Vector.Hybrid.Internal as H
--- import qualified Data.Vector.Primitive as P
 import qualified Data.Vector.Unboxed as U
--- import qualified Data.Vector.Unboxed.Mutable as UM
 import Data.Word
 import Sparse.Key
--- import Debug.Trace
+import Sparse.Fusion
 
 -- * Sparse Matrices
 
 class Eq0 a where
   isZero :: a -> Bool
+#ifndef HLINT
   default isZero :: (Num a, Eq a) => a -> Bool
   isZero = (0 ==)
   {-# INLINE isZero #-}
+#endif
 
 instance Eq0 Int
 instance Eq0 Word
@@ -124,6 +122,7 @@ singleton :: (G.Vector v a, Num a, Eq0 a) => Word32 -> Word32 -> Key -> a -> Mat
 singleton h w k v
   | isZero v  = mat 0 0 h w H.empty
   | otherwise = mat 0 0 h w $ H.fromListN 1 [(k,v)]
+{-# INLINE singleton #-}
 
 count :: Mat v a -> Int
 count = H.length . _matBody
@@ -131,10 +130,12 @@ count = H.length . _matBody
 
 zero :: G.Vector v a => Word32 -> Word32 -> Mat v a
 zero h w = fromList h w []
+{-# INLINE zero #-}
 
 -- is it worth sharing these?
 ident :: (G.Vector v a, Num a) => Word32 -> Mat v a
 ident w = mat 0 0 w w $ H.fromListN (fromIntegral w) [(key i i, 1) | i <- [0 .. w - 1]]
+{-# INLINE ident #-}
 
 -- break into 2-fat quadrants.
 --
@@ -196,6 +197,7 @@ fattest y0 = unsafeShiftR x5 1 + 1 where
   x3 = x2 .|. unsafeShiftR x2 4
   x4 = x3 .|. unsafeShiftR x3 8
   x5 = x4 .|. unsafeShiftR x4 16
+{-# INLINE fattest #-}
 
 -- | assuming @l <= h@. Returns @h@ if the predicate is never @True@ over @[l..h)@
 search :: (Int -> Bool) -> Int -> Int -> Int
@@ -223,97 +225,6 @@ plus a b = case a + b of
 mergeVectorsWith :: (G.Vector v (i, a), Ord i) => (a -> a -> Maybe a) -> v (i, a) -> v (i, a) -> v (i, a)
 mergeVectorsWith f va vb = G.unstream (mergeStreamsWith f (G.stream va) (G.stream vb))
 {-# INLINE mergeVectorsWith #-}
-
--- subject to stream fusion
-mergeStreamsWith :: (Monad m, Ord i) => (a -> a -> Maybe a) -> Stream m (i, a) -> Stream m (i, a) -> Stream m (i, a)
-mergeStreamsWith f (Stream stepa sa0 na) (Stream stepb sb0 nb)
-  = Stream step (MergeStart sa0 sb0) (toMax na + toMax nb) where
-  {-# INLINE [0] step #-}
-  step (MergeStart sa sb) = do
-    r <- stepa sa
-    return $ case r of
-      Yield (i, a) sa' -> Skip (MergeL sa' sb i a)
-      Skip sa'         -> Skip (MergeStart sa' sb)
-      Done             -> Skip (MergeLeftEnded sb)
-  step (MergeL sa sb i a) = do
-    r <- stepb sb
-    return $ case r of
-      Yield (j, b) sb' -> case compare i j of
-        LT -> Yield (i, a)     (MergeR sa sb' j b)
-        EQ -> case f a b of
-           Just c  -> Yield (i, c) (MergeStart sa sb')
-           Nothing -> Skip (MergeStart sa sb')
-        GT -> Yield (j, b)     (MergeL sa sb' i a)
-      Skip sb' -> Skip (MergeL sa sb' i a)
-      Done     -> Yield (i, a) (MergeRightEnded sa)
-  step (MergeR sa sb j b) = do
-    r <- stepa sa
-    return $ case r of
-      Yield (i, a) sa' -> case compare i j of
-        LT -> Yield (i, a)     (MergeR sa' sb j b)
-        EQ -> case f a b of
-          Just c  -> Yield (i, c) (MergeStart sa' sb)
-          Nothing -> Skip (MergeStart sa' sb)
-        GT -> Yield (j, b)     (MergeL sa' sb i a)
-      Skip sa' -> Skip (MergeR sa' sb j b)
-      Done     -> Yield (j, b) (MergeLeftEnded sb)
-  step (MergeLeftEnded sb) = do
-    r <- stepb sb
-    return $ case r of
-      Yield (j, b) sb' -> Yield (j, b) (MergeLeftEnded sb')
-      Skip sb'         -> Skip (MergeLeftEnded sb')
-      Done             -> Done
-  step (MergeRightEnded sa) = do
-    r <- stepa sa
-    return $ case r of
-      Yield (i, a) sa' -> Yield (i, a) (MergeRightEnded sa')
-      Skip sa'         -> Skip (MergeRightEnded sa')
-      Done             -> Done
-{-# INLINE [1] mergeStreamsWith #-}
-
-data MergeState sa sb i a
-  = MergeL sa sb i a
-  | MergeR sa sb i a
-  | MergeLeftEnded sb
-  | MergeRightEnded sa
-  | MergeStart sa sb
-
-data ConcatFourState sa sb sc sd
-  = C4 sa sb sc sd
-  | C3    sb sc sd
-  | C2       sc sd
-  | C1          sd
-
-concatFour :: Monad m => Stream m a -> Stream m a -> Stream m a -> Stream m a -> Stream m a
-concatFour (Stream stepa sa0 na) (Stream stepb sb0 nb) (Stream stepc sc0 nc) (Stream stepd sd0 nd)
-  = Stream step (C4 sa0 sb0 sc0 sd0) (na + nb + nc + nd) where
-  {-# INLINE [0] step #-}
-  step (C4 sa sb sc sd) = do
-    r <- stepa sa
-    return $ case r of
-      Yield a sa' -> Yield a (C4 sa' sb sc sd)
-      Skip sa'    -> Skip (C4 sa' sb sc sd)
-      Done        -> Skip (C3 sb sc sd)
-  step (C3 sb sc sd) = do
-    r <- stepb sb
-    return $ case r of
-      Yield a sb' -> Yield a (C3 sb' sc sd)
-      Skip sb'    -> Skip (C3 sb' sc sd)
-      Done        -> Skip (C2 sc sd)
-  step (C2 sc sd) = do
-    r <- stepc sc
-    return $ case r of
-      Yield a sc' -> Yield a (C2 sc' sd)
-      Skip sc'    -> Skip (C2 sc' sd)
-      Done        -> Skip (C1 sd)
-  step (C1 sd) = do
-    r <- stepd sd
-    return $ case r of
-      Yield a sd' -> Yield a (C1 sd')
-      Skip sd'    -> Skip (C1 sd')
-      Done        -> Done
-{-# INLINE [1] concatFour #-}
-
 
 -- Given a sorted array in [l,u), inserts val into its proper position,
 -- yielding a sorted [l,u]

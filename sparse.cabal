@@ -37,6 +37,7 @@ library
   hs-source-dirs: src
 
   exposed-modules:
+    Sparse.Fusion
     Sparse.Key
     Sparse.Matrix
 
