@@ -8,6 +8,24 @@
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE GADTs #-}
 
+-----------------------------------------------------------------------------
+-- |
+-- Copyright   :  (C) 2013 Edward Kmett
+-- License     :  BSD-style (see the file LICENSE)
+-- Maintainer  :  Edward Kmett <ekmett@gmail.com>
+-- Stability   :  experimental
+-- Portability :  non-portable
+--
+-- Keys in Morton order
+--
+-- This module provides combinators for shuffling together the bits of two
+-- key components to get a key that is based on their interleaved bits.
+--
+-- See <http://en.wikipedia.org/wiki/Z-order_curve> for more information
+-- about Morton order.
+--
+----------------------------------------------------------------------------
+
 module Sparse.Matrix.Key
   ( Key(..)
   , key
@@ -32,15 +50,12 @@ import Data.Word
 newtype Key = Key { runKey :: Word64 }
   deriving (Eq, Ord, Enum, S.Storable, P.Prim, U.Unbox, GM.MVector UM.MVector, G.Vector U.Vector)
 
-shuffled :: Iso' (Word32, Word32) Key
-shuffled = iso (uncurry key) unshuffle
-{-# INLINE shuffled #-}
-
-unshuffled :: Iso' Key (Word32, Word32)
-unshuffled = iso unshuffle (uncurry key)
-{-# INLINE unshuffled #-}
-
--- | This should be order preserving
+-- | Construct a key from a pair of indices.
+--
+-- @
+-- key i j ^. _1 = i
+-- key i j ^. _2 = j
+-- @
 key :: Word32 -> Word32 -> Key
 key i j = Key k5 where
   k0 = unsafeShiftL (fromIntegral i) 32 .|. fromIntegral j
@@ -50,6 +65,25 @@ key i j = Key k5 where
   k4 = unsafeShiftL (k3 .&. 0x0C0C0C0C0C0C0C0C) 2  .|. unsafeShiftR k3 2  .&. 0x0C0C0C0C0C0C0C0C .|. k3 .&. 0xC3C3C3C3C3C3C3C3
   k5 = unsafeShiftL (k4 .&. 0x2222222222222222) 1  .|. unsafeShiftR k4 1  .&. 0x2222222222222222 .|. k4 .&. 0x9999999999999999
 {-# INLINE key #-}
+
+-- | This isomorphism lets you build a key from a pair of indices.
+--
+-- @
+-- key i j ≡ (i,j)^.shuffled
+-- @
+--
+-- @
+-- 'shuffled' . 'unshuffled' = 'id'
+-- 'unshuffled' . 'shuffled' = 'id'
+-- @
+shuffled :: Iso' (Word32, Word32) Key
+shuffled = iso (uncurry key) unshuffle
+{-# INLINE shuffled #-}
+
+-- | This isomorphism lets you build a pair of indices from a key.
+unshuffled :: Iso' Key (Word32, Word32)
+unshuffled = iso unshuffle (uncurry key)
+{-# INLINE unshuffled #-}
 
 unshuffle :: Key -> (Word32, Word32)
 unshuffle (Key k0) = (fromIntegral (unsafeShiftR k5 32), fromIntegral k5) where
@@ -73,9 +107,9 @@ instance Field1 Key Key Word32 Word32 where
          i3 = unsafeShiftL (i2 .&. 0x00F000F000F000F0) 4  .|. i2 .&. 0xF00FF00FF00FF00F
          i4 = unsafeShiftL (i3 .&. 0x0C0C0C0C0C0C0C0C) 2  .|. i3 .&. 0xC3C3C3C3C3C3C3C3
          i5 = unsafeShiftL (i4 .&. 0x2222222222222222) 1  .|. i4 .&. 0x9999999999999999
-      in Key (unsafeShiftL i5 1 .|. ij .&. mj)
+      in Key (unsafeShiftL i5 1 .|. ij .&. m2)
     where
-      k0 = unsafeShiftR (ij .&. mi) 1
+      k0 = unsafeShiftR (ij .&. m1) 1
       k1 = (unsafeShiftR k0 1  .|. k0) .&. 0x3333333333333333
       k2 = (unsafeShiftR k1 2  .|. k1) .&. 0x0F0F0F0F0F0F0F0F
       k3 = (unsafeShiftR k2 4  .|. k2) .&. 0x00FF00FF00FF00FF
@@ -92,9 +126,9 @@ instance Field2 Key Key Word32 Word32 where
          j3 = unsafeShiftL (j2 .&. 0x00F000F000F000F0) 4  .|. j2 .&. 0xF00FF00FF00FF00F
          j4 = unsafeShiftL (j3 .&. 0x0C0C0C0C0C0C0C0C) 2  .|. j3 .&. 0xC3C3C3C3C3C3C3C3
          j5 = unsafeShiftL (j4 .&. 0x2222222222222222) 1  .|. j4 .&. 0x9999999999999999
-      in Key (ij .&. mi .|. j5)
+      in Key (ij .&. m1 .|. j5)
     where
-      k0 = ij .&. mj
+      k0 = ij .&. m2
       k1 = (unsafeShiftR k0 1  .|. k0) .&. 0x3333333333333333
       k2 = (unsafeShiftR k1 2  .|. k1) .&. 0x0F0F0F0F0F0F0F0F
       k3 = (unsafeShiftR k2 4  .|. k2) .&. 0x00FF00FF00FF00FF
@@ -117,8 +151,11 @@ instance Read Key where
     , (j,u) <- readsPrec 11 t
     ]
 
-mi, mj :: Word64
-mi = 0xAAAAAAAAAAAAAAAA
-mj = 0x5555555555555555
-{-# INLINE mi #-}
-{-# INLINE mj #-}
+-- * Utilities
+
+-- | Masks for the interleaved components of a key
+m1, m2 :: Word64
+m1 = 0xAAAAAAAAAAAAAAAA
+m2 = 0x5555555555555555
+{-# INLINE m1 #-}
+{-# INLINE m2 #-}
