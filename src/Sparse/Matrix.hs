@@ -13,17 +13,34 @@
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE UndecidableInstances #-}
 
-module Sparse.Matrix where
+module Sparse.Matrix
+  (
+  -- * Sparse Matrices
+    Mat(..)
+  -- * Construction
+  , fromList
+  , singleton
+  , ident
+  , empty
+  -- * Consumption
+  , count
+  -- * Distinguishable Zero
+  , Eq0(..)
+  -- * Customization
+  , addWith
+  , multiplyWith
+  , nonZero
+  -- * Lenses
+  , _Mat, keys, values
+  ) where
 
-import Control.Applicative
+import Control.Applicative hiding (empty)
 import Control.Lens
 import Data.Bits
--- import Data.Bits.Extras
 import Data.Foldable
 import Data.Function (on)
 import qualified Data.Vector.Algorithms.Intro as Intro
 import qualified Data.Vector.Generic as G
--- import qualified Data.Vector.Generic.Mutable as GM
 import qualified Data.Vector.Hybrid as H
 import qualified Data.Vector.Hybrid.Internal as H
 import qualified Data.Vector.Unboxed as U
@@ -31,7 +48,7 @@ import Data.Word
 import Sparse.Fusion
 import Sparse.Key
 
--- * Sparse Matrices
+-- * Distinguishable Zero
 
 class Eq0 a where
   isZero :: a -> Bool
@@ -46,6 +63,8 @@ instance Eq0 Word
 instance Eq0 Integer
 instance Eq0 Float
 instance Eq0 Double
+
+-- * Sparse Matrices
 
 newtype Mat v a = Mat { runMat :: H.Vector U.Vector v (Key, a) }
 
@@ -87,6 +106,9 @@ instance (Applicative f, G.Vector v a, G.Vector v b) => Each f (Mat v a) (Mat v 
     f' = uncurry (indexed f)
   {-# INLINE each #-}
 
+instance (Functor f, Contravariant f, G.Vector v a) => Contains f (Mat v a) where
+  contains = containsIx
+
 instance (Applicative f, G.Vector v a) => Ixed f (Mat v a) where
   ix i f m@(Mat (H.V ks vs))
     | Just j <- ks U.!? l, i == j = indexed f i (vs G.! l) <&> \v -> Mat (H.V ks (vs G.// [(l,v)]))
@@ -94,7 +116,7 @@ instance (Applicative f, G.Vector v a) => Ixed f (Mat v a) where
     where l = search (\j -> (ks U.! j) >= i) 0 (U.length ks)
   {-# INLINE ix #-}
 
--- only legal for top level matrices or where the singleton value matches on all of the bits of the 'context'
+{-
 instance G.Vector v a => At (Mat v a) where
   at i f m@(Mat (H.V ks vs)) = case ks U.!? l of
     Just j
@@ -106,31 +128,40 @@ instance G.Vector v a => At (Mat v a) where
         Nothing -> m
     where l = search (\j -> (ks U.! j) >= i) 0 (U.length ks)
   {-# INLINE at #-}
+-}
 
 instance Eq0 (Mat v a) where
   isZero = H.null . runMat
   {-# INLINE isZero #-}
 
--- Build a sparse (h * w) a-valued matrix.
+-- * Construction
+
+-- | Build a sparse matrix.
 fromList :: G.Vector v a => [(Key, a)] -> Mat v a
 fromList xs = Mat $ H.modify (Intro.sortBy (compare `on` fst)) $ H.fromList xs
 {-# INLINE fromList #-}
 
+-- | @singleton@ makes a matrix with a singleton value at a given location
 singleton :: G.Vector v a => Key -> a -> Mat v a
 singleton k v = Mat $ H.singleton (k,v)
 {-# INLINE singleton #-}
 
-count :: Mat v a -> Int
-count = H.length . runMat
-{-# INLINE count #-}
+-- | @ident n@ makes an @n@ x @n@ identity matrix
+ident :: (G.Vector v a, Num a) => Word32 -> Mat v a
+ident w = Mat $ H.generate (fromIntegral w) $ \i -> let i' = fromIntegral i in (key i' i', 1)
+{-# INLINE ident #-}
 
+-- | The empty matrix
 empty :: G.Vector v a => Mat v a
 empty = Mat H.empty
 {-# INLINE empty #-}
 
-ident :: (G.Vector v a, Num a) => Word32 -> Mat v a
-ident w = Mat $ H.generate (fromIntegral w) $ \i -> let i' = fromIntegral i in (key i' i', 1)
-{-# INLINE ident #-}
+-- * Consumption
+
+-- | Count the number of non-zero entries in the matrix
+count :: Mat v a -> Int
+count = H.length . runMat
+{-# INLINE count #-}
 
 instance (G.Vector v a, Num a, Eq0 a) => Num (Mat v a) where
   abs    = over each abs
@@ -157,10 +188,21 @@ nonZero f a b = case f a b of
     | otherwise -> Just c
 {-# INLINE nonZero #-}
 
+-- | Merge two matrices where the indices coincide into a new matrix. This provides for generalized
+-- addition. Return 'Nothing' for zero.
+--
 addWith :: G.Vector v a => (a -> a -> Maybe a) -> Mat v a -> Mat v a -> Mat v a
 addWith f xs ys = Mat (G.unstream (mergeStreamsWith f (G.stream (runMat xs)) (G.stream (runMat ys))))
 {-# INLINE addWith #-}
 
+-- | Multiply two matrices using the specified multiplication and addition operation.
+--
+-- We can work with the Boolean semiring as a @Mat Data.Vector.Unboxed.Vector ()@ using:
+--
+-- @
+-- booleanOr = addWith (const . Just)
+-- booleanAnd = multiplyWith const (const . Just)
+-- @
 multiplyWith :: G.Vector v a => (a -> a -> a) -> (a -> a -> Maybe a) -> Mat v a -> Mat v a -> Mat v a
 multiplyWith times plus x0 y0 = case compare (count x0) 1 of
   LT -> Mat H.empty
@@ -210,24 +252,27 @@ search p = go where
 
 -- | @smear x@ finds the smallest @2^n-1 >= x@
 smear :: Word64 -> Word64
-smear k0 = k5 where
+smear k0 = k6 where
   k1 = k0 .|. unsafeShiftR k0 1
   k2 = k1 .|. unsafeShiftR k1 2
   k3 = k2 .|. unsafeShiftR k2 4
   k4 = k3 .|. unsafeShiftR k3 8
   k5 = k4 .|. unsafeShiftR k4 16
+  k6 = k5 .|. unsafeShiftR k5 32
 {-# INLINE smear #-}
 
+-- | Determine the parity of
 parity :: Word64 -> Bool
-parity k0 = testBit k5 0 where
+parity k0 = testBit k6 0 where
   k1 = k0 `xor` unsafeShiftR k0 1
   k2 = k1 `xor` unsafeShiftR k1 2
   k3 = k2 `xor` unsafeShiftR k2 4
   k4 = k3 `xor` unsafeShiftR k3 8
   k5 = k4 `xor` unsafeShiftR k4 16
+  k6 = k5 `xor` unsafeShiftR k5 32
 {-# INLINE parity #-}
 
--- @critical m@ assumes @count m >= 2@ and tells you the mask to use for @split@
+-- | @critical m@ assumes @count m >= 2@ and tells you the mask to use for @split@
 critical :: G.Vector v a => Mat v a -> Word64
 critical (Mat (H.V ks _)) = smear (xor lo hi)  where -- `xor` unsafeShiftR bits 1 where -- the bit we're splitting on
   lo = runKey (U.head ks)
