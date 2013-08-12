@@ -29,7 +29,7 @@ import qualified Data.Vector.Generic as G
 -- import qualified Data.Vector.Generic.Mutable as GM
 import qualified Data.Vector.Hybrid as H
 import qualified Data.Vector.Hybrid.Internal as H
-import Data.Vector.Fusion.Stream as S (Stream, fromList) -- , filter)
+-- import Data.Vector.Fusion.Stream as S (Stream, fromList) -- , filter)
 import qualified Data.Vector.Unboxed as U
 import Data.Word
 import Sparse.Key
@@ -115,12 +115,8 @@ instance Eq0 (Mat v a) where
   {-# INLINE isZero #-}
 
 -- Build a sparse (h * w) a-valued matrix.
-fromStream :: G.Vector v a => Stream (Key, a) -> Mat v a
-fromStream xs = Mat $ H.modify (Intro.sortBy (compare `on` fst)) $ G.unstream xs
-{-# INLINE fromStream #-}
-
 fromList :: G.Vector v a => [(Key, a)] -> Mat v a
-fromList = fromStream . S.fromList
+fromList xs = Mat $ H.modify (Intro.sortBy (compare `on` fst)) $ H.fromList xs
 {-# INLINE fromList #-}
 
 singleton :: G.Vector v a => Key -> a -> Mat v a
@@ -235,3 +231,4 @@ insert cmp a l = loop
                       _  -> GM.unsafeWrite a j val
 {-# INLINE insert #-}
 -}
+
