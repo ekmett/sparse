@@ -11,8 +11,7 @@
 module Sparse.Key
   ( Key(..)
   , key
-  , shuffled
-  , unshuffled
+  , shuffled, unshuffled
   , _ii, _jj
   ) where
 
@@ -46,16 +45,11 @@ unshuffled = iso unshuffle (uncurry key)
 key :: Word32 -> Word32 -> Key
 key i j = Key k5 where
   k0 = unsafeShiftL (fromIntegral i) 32 .|. fromIntegral j
-  t0 = xor k0 (unsafeShiftR k0 16) .&. 0x00000000FFFF0000
-  k1 = k0 `xor` t0 `xor` unsafeShiftL t0 16
-  t1 = xor k1 (unsafeShiftR k1 8 ) .&. 0x0000FF000000FF00
-  k2 = k1 `xor` t1 `xor` unsafeShiftL t1 8
-  t2 = xor k2 (unsafeShiftR k2 4 ) .&. 0x00F000F000F000F0
-  k3 = k2 `xor` t2 `xor` unsafeShiftL t2 4
-  t3 = xor k3 (unsafeShiftR k3 2 ) .&.  0x0C0C0C0C0C0C0C0C
-  k4 = k3 `xor` t3 `xor` unsafeShiftL t3 2
-  t4 = xor k4 (unsafeShiftR k4 1 ) .&. 0x2222222222222222
-  k5 = k4 `xor` t4 `xor` unsafeShiftL t4 1
+  k1 = unsafeShiftL (k0 .&. 0x00000000FFFF0000) 16 .|. unsafeShiftR k0 16 .&. 0x00000000FFFF0000 .|. k0 .&. 0xFFFF00000000FFFF
+  k2 = unsafeShiftL (k1 .&. 0x0000FF000000FF00) 8  .|. unsafeShiftR k1 8  .&. 0x0000FF000000FF00 .|. k1 .&. 0xFF0000FFFF0000FF
+  k3 = unsafeShiftL (k2 .&. 0x00F000F000F000F0) 4  .|. unsafeShiftR k2 4  .&. 0x00F000F000F000F0 .|. k2 .&. 0xF00FF00FF00FF00F
+  k4 = unsafeShiftL (k3 .&. 0x0C0C0C0C0C0C0C0C) 2  .|. unsafeShiftR k3 2  .&. 0x0C0C0C0C0C0C0C0C .|. k3 .&. 0xC3C3C3C3C3C3C3C3
+  k5 = unsafeShiftL (k4 .&. 0x2222222222222222) 1  .|. unsafeShiftR k4 1  .&. 0x2222222222222222 .|. k4 .&. 0x9999999999999999
 {-# INLINE key #-}
 
 unshuffle :: Key -> (Word32, Word32)
@@ -71,6 +65,44 @@ unshuffle (Key k0) = (fromIntegral (unsafeShiftR k5 32), fromIntegral k5) where
   t4 = xor k4 (unsafeShiftR k4 16) .&. 0x00000000FFFF0000
   k5 = k4 `xor` t4 `xor` unsafeShiftL t4 16
 {-# INLINE unshuffle #-}
+
+instance Field1 Key Key Word32 Word32 where
+  _1 f (Key ij) = indexed f (0 :: Int) (fromIntegral k5) <&> \i -> let
+         i0 = fromIntegral i
+         i1 = unsafeShiftL (i0 .&. 0x00000000FFFF0000) 16 .|. i0 .&. 0xFFFF00000000FFFF
+         i2 = unsafeShiftL (i1 .&. 0x0000FF000000FF00) 8  .|. i1 .&. 0xFF0000FFFF0000FF
+         i3 = unsafeShiftL (i2 .&. 0x00F000F000F000F0) 4  .|. i2 .&. 0xF00FF00FF00FF00F
+         i4 = unsafeShiftL (i3 .&. 0x0C0C0C0C0C0C0C0C) 2  .|. i3 .&. 0xC3C3C3C3C3C3C3C3
+         i5 = unsafeShiftL (i4 .&. 0x2222222222222222) 1  .|. i4 .&. 0x9999999999999999
+      in Key (unsafeShiftL i5 1 .|. ij .&. mj)
+    where
+      k0 = unsafeShiftR (ij .&. mi) 1
+      k1 = (unsafeShiftR k0 1  .|. k0) .&. 0x3333333333333333
+      k2 = (unsafeShiftR k1 2  .|. k1) .&. 0x0F0F0F0F0F0F0F0F
+      k3 = (unsafeShiftR k2 4  .|. k2) .&. 0x00FF00FF00FF00FF
+      k4 = (unsafeShiftR k3 8  .|. k3) .&. 0x0000FFFF0000FFFF
+      k5 = (unsafeShiftR k4 16 .|. k4) .&. 0x00000000FFFFFFFF
+  -- _1 = unshuffled._1 -- reference implementation
+  {-# INLINE _1 #-}
+
+instance Field2 Key Key Word32 Word32 where
+  _2 f (Key ij) = indexed f (1 :: Int) (fromIntegral k5) <&> \j -> let
+         j0 = fromIntegral j
+         j1 = unsafeShiftL (j0 .&. 0x00000000FFFF0000) 16 .|. j0 .&. 0xFFFF00000000FFFF
+         j2 = unsafeShiftL (j1 .&. 0x0000FF000000FF00) 8  .|. j1 .&. 0xFF0000FFFF0000FF
+         j3 = unsafeShiftL (j2 .&. 0x00F000F000F000F0) 4  .|. j2 .&. 0xF00FF00FF00FF00F
+         j4 = unsafeShiftL (j3 .&. 0x0C0C0C0C0C0C0C0C) 2  .|. j3 .&. 0xC3C3C3C3C3C3C3C3
+         j5 = unsafeShiftL (j4 .&. 0x2222222222222222) 1  .|. j4 .&. 0x9999999999999999
+      in Key (ij .&. mi .|. j5)
+    where
+      k0 = ij .&. mj
+      k1 = (unsafeShiftR k0 1  .|. k0) .&. 0x3333333333333333
+      k2 = (unsafeShiftR k1 2  .|. k1) .&. 0x0F0F0F0F0F0F0F0F
+      k3 = (unsafeShiftR k2 4  .|. k2) .&. 0x00FF00FF00FF00FF
+      k4 = (unsafeShiftR k3 8  .|. k3) .&. 0x0000FFFF0000FFFF
+      k5 = (unsafeShiftR k4 16 .|. k4) .&. 0x00000000FFFFFFFF
+  -- _2 = unshuffled._2 -- reference implementation
+  {-# INLINE _2 #-}
 
 instance Show Key where
   showsPrec d w = case unshuffle w of
@@ -92,19 +124,10 @@ mj = 0x5555555555555555
 {-# INLINE mi #-}
 {-# INLINE mj #-}
 
--- TODO: half shuffle
-instance Field1 Key Key Word32 Word32 where
-  _1 = unshuffled._1
-  {-# INLINE _1 #-}
-
-instance Field2 Key Key Word32 Word32 where
-  _2 = unshuffled._2
-  {-# INLINE _2 #-}
-
 -- | Lenses for working with masked off versions of the @i@ or @j@ column.
 -- The result is spread with interleaved zeros in the odd bits.
 _ii, _jj :: Lens' Key Word64
-_jj f (Key ij) = f (ij .&. mj) <&> \j' -> Key $ (j' .&. mj) .|. ij .&. mi
-_ii f (Key ij) = f (unsafeShiftR (ij .&. mi) 1) <&> \i' -> Key $ (unsafeShiftL i' 1 .&. mi) .|. ij .&. mj
+_jj f (Key ij) = f (ij .&. mj) <&> \j -> Key (j .&. mj .|. ij .&. mi)
+_ii f (Key ij) = f (unsafeShiftR (ij .&. mi) 1) <&> \i -> Key (unsafeShiftL i 1 .&. mi .|. ij .&. mj)
 {-# INLINE _ii #-}
 {-# INLINE _jj #-}
