@@ -1,17 +1,19 @@
+{-# LANGUAGE BangPatterns #-}
 module Sparse.Fusion
   ( mergeStreamsWith
   , timesSingleton
   , singletonTimes
   ) where
 
+import Data.Bits
 import Data.Vector.Fusion.Stream.Monadic (Step(..), Stream(..))
 import Data.Vector.Fusion.Stream.Size
+import Data.Word
 import Sparse.Key
 
 mergeStreamsWith :: (Monad m, Ord i) => (a -> a -> Maybe a) -> Stream m (i, a) -> Stream m (i, a) -> Stream m (i, a)
 mergeStreamsWith f (Stream stepa sa0 na) (Stream stepb sb0 nb)
   = Stream step (MergeStart sa0 sb0) (toMax na + toMax nb) where
-  {-# INLINE [0] step #-}
   step (MergeStart sa sb) = do
     r <- stepa sa
     return $ case r of
@@ -52,6 +54,7 @@ mergeStreamsWith f (Stream stepa sa0 na) (Stream stepb sb0 nb)
       Yield (i, a) sa' -> Yield (i, a) (MergeRightEnded sa')
       Skip sa'         -> Skip (MergeRightEnded sa')
       Done             -> Done
+  {-# INLINE [0] step #-}
 {-# INLINE [1] mergeStreamsWith #-}
 
 data MergeState sa sb i a
@@ -61,11 +64,36 @@ data MergeState sa sb i a
   | MergeRightEnded sa
   | MergeStart sa sb
 
+m1, m2 :: Word64
+m1 = 0xAAAAAAAAAAAAAAAA
+m2 = 0x5555555555555555
 
 timesSingleton :: Monad m => (a -> b -> c) -> Stream m (Key, a) -> (Key, b) -> Stream m (Key, c)
-timesSingleton = undefined
+timesSingleton f (Stream stepa sa0 na) (Key jk, b) = Stream step sa0 (toMax na) where
+  !jj = unsafeShiftR (jk .&. m1) 1
+  !kk = jk .&. m2
+  step sa = do
+    r <- stepa sa
+    return $ case r of
+      Yield (Key ij, a) sa'
+        | ij .&. m2 == jj -> Yield (Key (ij .&. m1 .|. kk), f a b) sa'
+        | otherwise -> Skip sa'
+      Skip sa'      -> Skip sa'
+      Done -> Done
+  {-# INLINE [0] step #-}
 {-# INLINE [1] timesSingleton #-}
 
 singletonTimes :: Monad m => (a -> b -> c) -> (Key, a) -> Stream m (Key, b) -> Stream m (Key, c)
-singletonTimes = undefined
+singletonTimes f (Key ij, a) (Stream  stepb sb0 nb) = Stream step sb0 (toMax nb) where
+  !jj = unsafeShiftL (ij .&. m2) 1
+  !ii = ij .&. m1
+  step sb = do
+    r <- stepb sb
+    return $ case r of
+      Yield (Key jk, b) sb'
+        | jk .&. m1 == jj -> Yield (Key (ii .|. jk .&. m2), f a b) sb'
+        | otherwise -> Skip sb'
+      Skip sa' -> Skip sa'
+      Done -> Done
+  {-# INLINE [0] step #-}
 {-# INLINE [1] singletonTimes #-}
