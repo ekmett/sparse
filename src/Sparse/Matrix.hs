@@ -236,8 +236,6 @@ multiplyWith times plus x0 y0 = case compare (count x0) 1 of
     {-# INLINE fby #-}
 {-# INLINE multiplyWith #-}
 
--- if ij^._jj == jk^._ii then singleton h w (jk&_1.~ij^._1) (xij*yjk) else zero h w
-
 -- * Utilities
 
 -- | assuming @l <= h@. Returns @h@ if the predicate is never @True@ over @[l..h)@

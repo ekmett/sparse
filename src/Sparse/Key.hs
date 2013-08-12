@@ -12,7 +12,6 @@ module Sparse.Key
   ( Key(..)
   , key
   , shuffled, unshuffled
-  , _ii, _jj
   ) where
 
 import Control.Lens
@@ -123,11 +122,3 @@ mi = 0xAAAAAAAAAAAAAAAA
 mj = 0x5555555555555555
 {-# INLINE mi #-}
 {-# INLINE mj #-}
-
--- | Lenses for working with masked off versions of the @i@ or @j@ column.
--- The result is spread with interleaved zeros in the odd bits.
-_ii, _jj :: Lens' Key Word64
-_jj f (Key ij) = f (ij .&. mj) <&> \j -> Key (j .&. mj .|. ij .&. mi)
-_ii f (Key ij) = f (unsafeShiftR (ij .&. mi) 1) <&> \i -> Key (unsafeShiftL i 1 .&. mi .|. ij .&. mj)
-{-# INLINE _ii #-}
-{-# INLINE _jj #-}
