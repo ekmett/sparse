@@ -247,9 +247,9 @@ multiplyWith times plus x0 y0 = case compare (count x0) 1 of
        | otherwise = case split cy y of
          (m0,m1) | parity cy -> goR cx x m0 `fby` goR cx x m1 -- left and right
                  | otherwise -> goR cx x m0 `add` goR cx x m1 -- merge top and bottom traced out regions
-    gon1 (Mat x) (Mat y) = Mat (G.unstream (timesSingleton times (G.stream x) (H.head y)))
+    gon1 (Mat x) (Mat y) = Mat $ H.modify (Intro.sortBy (compare `on` fst)) $ G.unstream (timesSingleton times (G.stream x) (H.head y))
     {-# INLINE gon1 #-}
-    go1n (Mat x) (Mat y) = Mat (G.unstream (singletonTimes times (H.head x) (G.stream y)))
+    go1n (Mat x) (Mat y) = Mat $ H.modify (Intro.sortBy (compare `on` fst)) $ G.unstream (singletonTimes times (H.head x) (G.stream y))
     {-# INLINE go1n #-}
     add x y = addWith plus x y
     {-# INLINE add #-}
