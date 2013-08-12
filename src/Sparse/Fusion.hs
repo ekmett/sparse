@@ -1,10 +1,12 @@
 module Sparse.Fusion
   ( mergeStreamsWith
-  , concatFour
+  , timesSingleton
+  , singletonTimes
   ) where
 
 import Data.Vector.Fusion.Stream.Monadic (Step(..), Stream(..))
 import Data.Vector.Fusion.Stream.Size
+import Sparse.Key
 
 mergeStreamsWith :: (Monad m, Ord i) => (a -> a -> Maybe a) -> Stream m (i, a) -> Stream m (i, a) -> Stream m (i, a)
 mergeStreamsWith f (Stream stepa sa0 na) (Stream stepb sb0 nb)
@@ -59,6 +61,17 @@ data MergeState sa sb i a
   | MergeRightEnded sa
   | MergeStart sa sb
 
+
+timesSingleton :: Monad m => (a -> b -> c) -> Stream m (Key, a) -> (Key, b) -> Stream m (Key, c)
+timesSingleton = undefined
+{-# INLINE [1] timesSingleton #-}
+
+singletonTimes :: Monad m => (a -> b -> c) -> (Key, a) -> Stream m (Key, b) -> Stream m (Key, c)
+singletonTimes = undefined
+{-# INLINE [1] singletonTimes #-}
+
+
+{-
 -- * concatFour
 
 data ConcatFourState sa sb sc sd
@@ -96,3 +109,4 @@ concatFour (Stream stepa sa0 na) (Stream stepb sb0 nb) (Stream stepc sc0 nc) (St
       Skip sd'    -> Skip (C1 sd')
       Done        -> Done
 {-# INLINE [1] concatFour #-}
+-}

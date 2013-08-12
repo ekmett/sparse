@@ -1,6 +1,7 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE DefaultSignatures #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE KindSignatures #-}
@@ -25,7 +26,6 @@ import qualified Data.Vector.Generic as G
 -- import qualified Data.Vector.Generic.Mutable as GM
 import qualified Data.Vector.Hybrid as H
 import qualified Data.Vector.Hybrid.Internal as H
--- import Data.Vector.Fusion.Stream as S (Stream, fromList) -- , filter)
 import qualified Data.Vector.Unboxed as U
 import Data.Word
 import Sparse.Fusion
@@ -57,12 +57,15 @@ instance (G.Vector v a, Read a) => Read (Mat v a) where
 
 _Mat :: Iso (Mat u a) (Mat v b) (H.Vector U.Vector u (Key, a)) (H.Vector U.Vector v (Key, b))
 _Mat = iso runMat Mat
+{-# INLINE _Mat #-}
 
 keys :: Lens (H.Vector u v (a,b)) (H.Vector w v (c,b)) (u a) (w c)
 keys f (H.V ks vs) = f ks <&> \ks' -> H.V ks' vs
+{-# INLINE keys #-}
 
 values :: Lens (H.Vector u v (a,b)) (H.Vector u w (a,c)) (v b) (w c)
 values f (H.V ks vs) = f vs <&> \vs' -> H.V ks vs'
+{-# INLINE values #-}
 
 instance Functor v => Functor (Mat v) where
   fmap = over (_Mat.values.mapped)
@@ -84,7 +87,6 @@ instance (Applicative f, G.Vector v a, G.Vector v b) => Each f (Mat v a) (Mat v 
     f' = uncurry (indexed f)
   {-# INLINE each #-}
 
--- only legal for top level matrices or where the singleton value matches on all of the bits of the 'context'
 instance (Applicative f, G.Vector v a) => Ixed f (Mat v a) where
   ix i f m@(Mat (H.V ks vs))
     | Just j <- ks U.!? l, i == j = indexed f i (vs G.! l) <&> \v -> Mat (H.V ks (vs G.// [(l,v)]))
@@ -130,35 +132,6 @@ ident :: (G.Vector v a, Num a) => Word32 -> Mat v a
 ident w = Mat $ H.generate (fromIntegral w) $ \i -> let i' = fromIntegral i in (key i' i', 1)
 {-# INLINE ident #-}
 
--- | @smear x@ finds the smallest @2^n-1 >= x@
-smear :: Word64 -> Word64
-smear k0 = k5 where
-  k1 = k0 .|. unsafeShiftR k0 1
-  k2 = k1 .|. unsafeShiftR k1 2
-  k3 = k2 .|. unsafeShiftR k2 4
-  k4 = k3 .|. unsafeShiftR k3 8
-  k5 = k4 .|. unsafeShiftR k4 16
-
--- @critical m@ assumes @count m >= 2@ and tells you the critical bit to use for @split@
-critical :: G.Vector v a => Mat v a -> Word64
-critical (Mat (H.V ks _)) = bits `xor` unsafeShiftR bits 1 where -- the bit we're splitting on
-  lo = runKey (U.head ks)
-  hi = runKey (U.last ks)
-  xlh = xor lo hi
-  bits = smear xlh
-
--- | partition along the critical bit into a 2-fat component and the remainder.
---
--- Note: the keys have 'junk' on the top of the keys, but it should be exactly the junk we need them to have when we rejoin the quadrants
---       or reassemble a key from matrix multiplication!
-split :: G.Vector v a => Word64 -> Mat v a -> (Mat v a, Mat v a)
-split mask (Mat h@(H.V ks _)) = (Mat m0,Mat m1)
-  where
-    n = U.length ks
-    k = search (\i -> runKey (ks U.! i) .&. mask /= 0) 0 n
-    (m0,m1) = H.splitAt k h
-{-# INLINE split #-}
-
 instance (G.Vector v a, Num a, Eq0 a) => Num (Mat v a) where
   abs    = over each abs
   {-# INLINE abs #-}
@@ -169,49 +142,59 @@ instance (G.Vector v a, Num a, Eq0 a) => Num (Mat v a) where
   fromInteger 0 = Mat H.empty
   fromInteger _ = error "Mat: fromInteger n"
   {-# INLINE fromInteger #-}
-  (+) = mergeWith $ \ a b -> case a + b of
-      c | isZero c  -> Nothing
-        | otherwise -> Just c
+  (+) = addWith $ nonZero (+)
   {-# INLINE (+) #-}
-  (-) = mergeWith $ \ a b -> case a - b of
+  (-) = addWith $ nonZero (-)
+  {-# INLINE (-) #-}
+  (*) = multiplyWith (*) $ \ a b -> case a + b of
       c | isZero c  -> Nothing
         | otherwise -> Just c
-  {-# INLINE (-) #-}
-  (*) = multiplyWith (*)
   {-# INLINE (*) #-}
 
+nonZero :: Eq0 c => (a -> b -> c) -> a -> b -> Maybe c
+nonZero f a b = case f a b of
+  c | isZero c -> Nothing
+    | otherwise -> Just c
+{-# INLINE nonZero #-}
 
-mergeWith :: G.Vector v a => (a -> a -> Maybe a) -> Mat v a -> Mat v a -> Mat v a
-mergeWith f xs ys = Mat (G.unstream (mergeStreamsWith f (G.stream (runMat xs)) (G.stream (runMat ys))))
-{-# INLINE mergeWith #-}
+addWith :: G.Vector v a => (a -> a -> Maybe a) -> Mat v a -> Mat v a -> Mat v a
+addWith f xs ys = Mat (G.unstream (mergeStreamsWith f (G.stream (runMat xs)) (G.stream (runMat ys))))
+{-# INLINE addWith #-}
 
-multiplyWith :: (G.Vector v a, G.Vector v b, G.Vector v c) => (a -> b -> c) -> Mat v a -> Mat v b -> Mat v c
-multiplyWith _f x0 y0 = case compare (count x0) 1 of
+multiplyWith :: G.Vector v a => (a -> a -> a) -> (a -> a -> Maybe a) -> Mat v a -> Mat v a -> Mat v a
+multiplyWith times plus x0 y0 = case compare (count x0) 1 of
   LT -> Mat H.empty
-  EQ -> go1n x0 y0 -- Mat (G.unstream (filterMap (\(k,v) -> undefined) (G.stream yv)))
-  GT -> case compare (count y0) 1 of
-    LT -> Mat H.empty
-    EQ -> gon1 x0 y0
-    GT -> gonn x0 y0 (critical x0) (critical y0)
+  EQ -> go1n x0 y0
+  GT -> goR (critical x0) x0 y0
   where
-    gon1 = undefined
-    go1n = undefined
-    gonn = undefined
+    goL x cy y = case compare (count x) 1 of -- we need to check th count of the left hand matrix
+      LT -> Mat H.empty
+      EQ -> go1n x y
+      GT -> go (critical x) x cy y
+    {-# INLINE goL #-}
+    goR cx x y = case compare (count y) 1 of -- we need to check the count of the right hand matrix
+      LT -> Mat H.empty
+      EQ -> gon1 x y
+      GT -> go cx x (critical y) y
+    {-# INLINE goR #-}
+    go cx x cy y -- choose and execute a split
+       | cx >= cy = case split cx x of
+         (m0,m1) | parity cx -> goL m0 cy y `add` goL m1 cy y -- merge left and right traced out regions
+                 | otherwise -> goL m0 cy y `fby` goL m1 cy y -- top and bottom
+       | otherwise = case split cy y of
+         (m0,m1) | parity cy -> goR cx x m0 `fby` goR cx x m1 -- left and right
+                 | otherwise -> goR cx x m0 `add` goR cx x m1 -- merge top and bottom traced out regions
+    gon1 (Mat x) (Mat y) = Mat (G.unstream (timesSingleton times (G.stream x) (H.head y)))
+    {-# INLINE gon1 #-}
+    go1n (Mat x) (Mat y) = Mat (G.unstream (singletonTimes times (H.head x) (G.stream y)))
+    {-# INLINE go1n #-}
+    add x y = addWith plus x y
+    {-# INLINE add #-}
+    fby (Mat l) (Mat r) = Mat (l H.++ r)
+    {-# INLINE fby #-}
 {-# INLINE multiplyWith #-}
 
-{-
-case x ^@? split of
-  | isZero x || isZero y = zero
-  | count x == 1 -- each side has a single entry, so we might as well solve for it!
-  , count y == 1
-  , (ij,xij) <- H.head (matBody x)
-  , (jk,yjk) <- H.head (matBody y) = if ij^._jj == jk^._ii then singleton h w (jk&_1.~ij^._1) (xij*yjk) else zero h w
-  | (x00,x01,x10,x11) <- quadrants x
-  , (y00,y01,y11,y11) <- quadrants y
-  where
-        h = height x
-        w = width y
--}
+-- if ij^._jj == jk^._ii then singleton h w (jk&_1.~ij^._1) (xij*yjk) else zero h w
 
 -- * Utilities
 
@@ -224,6 +207,45 @@ search p = go where
     | otherwise = go (m+1) h
     where m = l + div (h-l) 2
 {-# INLINE search #-}
+
+-- | @smear x@ finds the smallest @2^n-1 >= x@
+smear :: Word64 -> Word64
+smear k0 = k5 where
+  k1 = k0 .|. unsafeShiftR k0 1
+  k2 = k1 .|. unsafeShiftR k1 2
+  k3 = k2 .|. unsafeShiftR k2 4
+  k4 = k3 .|. unsafeShiftR k3 8
+  k5 = k4 .|. unsafeShiftR k4 16
+{-# INLINE smear #-}
+
+parity :: Word64 -> Bool
+parity k0 = testBit k5 0 where
+  k1 = k0 `xor` unsafeShiftR k0 1
+  k2 = k1 `xor` unsafeShiftR k1 2
+  k3 = k2 `xor` unsafeShiftR k2 4
+  k4 = k3 `xor` unsafeShiftR k3 8
+  k5 = k4 `xor` unsafeShiftR k4 16
+{-# INLINE parity #-}
+
+-- @critical m@ assumes @count m >= 2@ and tells you the mask to use for @split@
+critical :: G.Vector v a => Mat v a -> Word64
+critical (Mat (H.V ks _)) = smear (xor lo hi)  where -- `xor` unsafeShiftR bits 1 where -- the bit we're splitting on
+  lo = runKey (U.head ks)
+  hi = runKey (U.last ks)
+{-# INLINE critical #-}
+
+-- | partition along the critical bit into a 2-fat component and the remainder.
+--
+-- Note: the keys have 'junk' on the top of the keys, but it should be exactly the junk we need them to have when we rejoin the quadrants
+--       or reassemble a key from matrix multiplication!
+split :: G.Vector v a => Word64 -> Mat v a -> (Mat v a, Mat v a)
+split mask (Mat h@(H.V ks _)) = (Mat m0, Mat m1)
+  where
+    !n = U.length ks
+    !crit = mask `xor` unsafeShiftR mask 1
+    !k = search (\i -> runKey (ks U.! i) .&. crit /= 0) 0 n
+    (m0,m1) = H.splitAt k h
+{-# INLINE split #-}
 
 {-
 -- Given a sorted array in [l,u), inserts val into its proper position,
