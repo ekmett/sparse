@@ -1,5 +1,6 @@
 {-# LANGUAGE BangPatterns #-}
-module Sparse.Fusion
+
+module Sparse.Matrix.Fusion
   ( mergeStreamsWith
   , timesSingleton
   , singletonTimes
@@ -9,7 +10,7 @@ import Data.Bits
 import Data.Vector.Fusion.Stream.Monadic (Step(..), Stream(..))
 import Data.Vector.Fusion.Stream.Size
 import Data.Word
-import Sparse.Key
+import Sparse.Matrix.Key
 
 mergeStreamsWith :: (Monad m, Ord i) => (a -> a -> Maybe a) -> Stream m (i, a) -> Stream m (i, a) -> Stream m (i, a)
 mergeStreamsWith f (Stream stepa sa0 na) (Stream stepb sb0 nb)

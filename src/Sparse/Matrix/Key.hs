@@ -8,7 +8,7 @@
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE GADTs #-}
 
-module Sparse.Key
+module Sparse.Matrix.Key
   ( Key(..)
   , key
   , shuffled, unshuffled

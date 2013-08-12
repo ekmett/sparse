@@ -17,6 +17,9 @@ module Sparse.Matrix
   (
   -- * Sparse Matrices
     Mat(..)
+  -- * Keys
+  , Key
+  , key, shuffled, unshuffled
   -- * Construction
   , fromList
   , singleton
@@ -45,8 +48,8 @@ import qualified Data.Vector.Hybrid as H
 import qualified Data.Vector.Hybrid.Internal as H
 import qualified Data.Vector.Unboxed as U
 import Data.Word
-import Sparse.Fusion
-import Sparse.Key
+import Sparse.Matrix.Fusion
+import Sparse.Matrix.Key
 
 -- * Distinguishable Zero
 
