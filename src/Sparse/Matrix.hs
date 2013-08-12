@@ -3,8 +3,6 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
--- {-# LANGUAGE DeriveDataTypeable #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
@@ -13,13 +11,11 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE UndecidableInstances #-}
--- {-# LANGUAGE NoMonoLocalBinds #-}
 
 module Sparse.Matrix where
 
 import Control.Applicative
 import Control.Lens
--- import Control.Monad.Primitive
 import Data.Bits
 -- import Data.Bits.Extras
 import Data.Foldable
@@ -32,9 +28,8 @@ import qualified Data.Vector.Hybrid.Internal as H
 -- import Data.Vector.Fusion.Stream as S (Stream, fromList) -- , filter)
 import qualified Data.Vector.Unboxed as U
 import Data.Word
-import Sparse.Key
 import Sparse.Fusion
--- import Data.Typeable
+import Sparse.Key
 
 -- * Sparse Matrices
 
