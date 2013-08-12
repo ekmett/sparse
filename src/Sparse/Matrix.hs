@@ -152,12 +152,12 @@ critical (Mat (H.V ks _)) = bits `xor` unsafeShiftR bits 1 where -- the bit we'r
   xlh = xor lo hi
   bits = smear xlh
 
--- | partition (and rejoin) along the major axis into a 2-fat component and the remainder.
+-- | partition along the critical bit into a 2-fat component and the remainder.
 --
 -- Note: the keys have 'junk' on the top of the keys, but it should be exactly the junk we need them to have when we rejoin the quadrants
---       or reassemble a key from matrix multiplication.
-split :: G.Vector v a => Word64 -> Lens' (Mat v a) (Mat v a, Mat v a)
-split mask f (Mat h@(H.V ks _)) = f (Mat m0,Mat m1) <&> \ (Mat u,Mat v) -> Mat (u H.++ v)
+--       or reassemble a key from matrix multiplication!
+split :: G.Vector v a => Word64 -> Mat v a -> (Mat v a, Mat v a)
+split mask (Mat h@(H.V ks _)) = (Mat m0,Mat m1)
   where
     n = U.length ks
     k = search (\i -> runKey (ks U.! i) .&. mask /= 0) 0 n
@@ -174,25 +174,38 @@ instance (G.Vector v a, Num a, Eq0 a) => Num (Mat v a) where
   fromInteger 0 = Mat H.empty
   fromInteger _ = error "Mat: fromInteger n"
   {-# INLINE fromInteger #-}
-  Mat va + Mat vb = Mat (G.unstream (mergeStreamsWith f (G.stream va) (G.stream vb))) where
-    f a b = case a + b of
+  (+) = mergeWith $ \ a b -> case a + b of
       c | isZero c  -> Nothing
         | otherwise -> Just c
   {-# INLINE (+) #-}
-  Mat va - Mat vb = Mat (G.unstream (mergeStreamsWith f (G.stream va) (G.stream vb))) where
-    f a b = case a - b of
+  (-) = mergeWith $ \ a b -> case a - b of
       c | isZero c  -> Nothing
         | otherwise -> Just c
   {-# INLINE (-) #-}
-  (*) = error "TODO"
-  -- TODO: multiplication!
+  (*) = multiplyWith (*)
+  {-# INLINE (*) #-}
+
+
+mergeWith :: G.Vector v a => (a -> a -> Maybe a) -> Mat v a -> Mat v a -> Mat v a
+mergeWith f xs ys = Mat (G.unstream (mergeStreamsWith f (G.stream (runMat xs)) (G.stream (runMat ys))))
+{-# INLINE mergeWith #-}
+
+multiplyWith :: (G.Vector v a, G.Vector v b, G.Vector v c) => (a -> b -> c) -> Mat v a -> Mat v b -> Mat v c
+multiplyWith _f x0 y0 = case compare (count x0) 1 of
+  LT -> Mat H.empty
+  EQ -> go1n x0 y0 -- Mat (G.unstream (filterMap (\(k,v) -> undefined) (G.stream yv)))
+  GT -> case compare (count y0) 1 of
+    LT -> Mat H.empty
+    EQ -> gon1 x0 y0
+    GT -> gonn x0 y0 (critical x0) (critical y0)
+  where
+    gon1 = undefined
+    go1n = undefined
+    gonn = undefined
+{-# INLINE multiplyWith #-}
 
 {-
-multiply :: G.Vector v a => Mat v a -> Mat v a -> Mat v a
-multiply x@(Mat xv) y@(Mat yv) = case compare (count x) 1 of
-  LT -> zero
-  EQ -> Mat (G.unstream (filterMap (\(k,v) -> undefined) (G.stream yv)))
-  GT -> case x ^@? split of
+case x ^@? split of
   | isZero x || isZero y = zero
   | count x == 1 -- each side has a single entry, so we might as well solve for it!
   , count y == 1
