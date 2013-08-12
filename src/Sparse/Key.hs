@@ -30,7 +30,7 @@ import Data.Word
 -- | @key i j@ interleaves the bits of the keys @i@ and @j@.
 --
 -- Keys are then just values sorted in \"Morton Order\".
-newtype Key = Key { rawKey :: Word64 }
+newtype Key = Key { runKey :: Word64 }
   deriving (Eq, Ord, Enum, S.Storable, P.Prim, U.Unbox, GM.MVector UM.MVector, G.Vector U.Vector)
 
 shuffled :: Iso' (Word32, Word32) Key
