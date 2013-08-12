@@ -26,6 +26,7 @@ import qualified Data.Vector.Generic as G
 import qualified Data.Vector.Generic.Mutable as GM
 import qualified Data.Vector.Hybrid as H
 import qualified Data.Vector.Hybrid.Internal as H
+import Data.Vector.Fusion.Stream as S (Stream, fromList, filter)
 import qualified Data.Vector.Unboxed as U
 import Data.Word
 import Sparse.Key
@@ -47,13 +48,10 @@ instance Eq0 Integer
 instance Eq0 Float
 instance Eq0 Double
 
-data Mat v a = Mat
-  { _matShift                           :: {-# UNPACK #-}!Int
-  , _matI, _matJ, _matHeight, _matWidth :: {-# UNPACK #-}!Word32
-  , _matBody                            :: !(H.Vector U.Vector v (Key, a))
-  } deriving (Show)
+newtype Mat v a = Mat { runMat :: H.Vector U.Vector v (Key, a) } deriving (Show)
 
-makeLenses ''Mat
+_Mat :: Iso (Mat u a) (Mat v b) (H.Vector U.Vector u (Key, a)) (H.Vector U.Vector v (Key, b))
+_Mat = iso runMat Mat
 
 keys :: Lens (H.Vector u v (a,b)) (H.Vector w v (c,b)) (u a) (w c)
 keys f (H.V ks vs) = f ks <&> \ks' -> H.V ks' vs
@@ -62,33 +60,34 @@ values :: Lens (H.Vector u v (a,b)) (H.Vector u w (a,c)) (v b) (w c)
 values f (H.V ks vs) = f vs <&> \vs' -> H.V ks vs'
 
 instance Functor v => Functor (Mat v) where
-  fmap = over (matBody.values.mapped)
+  fmap = over (_Mat.values.mapped)
   {-# INLINE fmap #-}
 
 instance Foldable v => Foldable (Mat v) where
-  foldMap = foldMapOf (matBody.values.folded)
+  foldMap = foldMapOf (_Mat.values.folded)
   {-# INLINE foldMap #-}
 
 instance Traversable v => Traversable (Mat v) where
-  traverse = matBody.values.traverse
+  traverse = _Mat.values.traverse
   {-# INLINE traverse #-}
 
 type instance IxValue (Mat v a) = a
 type instance Index (Mat v a) = Key
 
--- modify an entry in the matrix... if it exists.
+-- only legal for top level matrices or where the singleton value matches on all of the bits of the 'context'
 instance (Applicative f, G.Vector v a) => Ixed f (Mat v a) where
-  ix i f m@Mat{_matBody = H.V ks vs}
-    | Just j <- ks U.!? l, i == j = indexed f i (vs G.! l) <&> \v' -> m { _matBody = H.V ks (vs G.// [(l,v')]) }
-    | otherwise           = pure m
+  ix i f m@(Mat (H.V ks vs))
+    | Just j <- ks U.!? l, i == j = indexed f i (vs G.! l) <&> \v -> Mat (H.V ks (vs G.// [(l,v)]))
+    | otherwise                   = pure m
     where l = search (\j -> (ks U.! j) >= i) 0 (U.length ks)
   {-# INLINE ix #-}
 
+-- only legal for top level matrices or where the singleton value matches on all of the bits of the 'context'
 instance G.Vector v a => At (Mat v a) where
-  at i f m@Mat{_matBody = H.V ks vs} = case ks U.!? l of
+  at i f m@(Mat (H.V ks vs)) = case ks U.!? l of
     Just j
       | i == j -> indexed f i (Just (vs G.! l)) <&> \mv -> case mv of
-        Just v  -> m { _matBody = H.V ks (vs G.// [(l,v)]) }
+        Just v  -> Mat $ H.V ks (vs G.// [(l,v)])
         Nothing  -> undefined -- TODO: delete
     _ -> indexed f i Nothing <&> \mv -> case mv of
         Just _v -> undefined -- TODO: insert v
@@ -97,50 +96,54 @@ instance G.Vector v a => At (Mat v a) where
   {-# INLINE at #-}
 
 instance Eq0 (Mat v a) where
-  isZero = H.null . _matBody
+  isZero = H.null . runMat
   {-# INLINE isZero #-}
 
-{-
-mask :: Int -> Word64
-mask lzs = complement (k0 .|. shiftL k0 32)
-  where k0 = bit (32-lzs) - 1
-{-# INLINE mask #-}
--}
-
 -- Build a sparse (h * w) a-valued matrix.
-fromList :: G.Vector v a => Word32 -> Word32 -> [(Key, a)] -> Mat v a
-fromList h w xs = mat 0 0 h w $ H.modify (Intro.sortBy (compare `on` fst)) (H.fromList xs)
+fromStream :: G.Vector v a => Stream (Key, a) -> Mat v a
+fromStream xs = Mat $ H.modify (Intro.sortBy (compare `on` fst)) $ G.unstream xs
+{-# INLINE fromStream #-}
+
+fromList :: G.Vector v a => [(Key, a)] -> Mat v a
+fromList = fromStream . S.fromList
 {-# INLINE fromList #-}
 
-mat :: Word32 -> Word32 -> Word32 -> Word32 -> H.Vector U.Vector v (Key, a) -> Mat v a
-mat i j h w = Mat (nlz ((h-1) .|. (w-1))) i j h w
-{-# INLINE mat #-}
-
-singleton :: (G.Vector v a, Num a, Eq0 a) => Word32 -> Word32 -> Key -> a -> Mat v a
-singleton h w k v
-  | isZero v  = mat 0 0 h w H.empty
-  | otherwise = mat 0 0 h w $ H.fromListN 1 [(k,v)]
+singleton :: G.Vector v a => Key -> a -> Mat v a
+singleton k v = Mat $ H.singleton (k,v)
 {-# INLINE singleton #-}
 
 count :: Mat v a -> Int
-count = H.length . _matBody
+count = H.length . runMat
 {-# INLINE count #-}
 
-zero :: G.Vector v a => Word32 -> Word32 -> Mat v a
-zero h w = fromList h w []
-{-# INLINE zero #-}
+empty :: G.Vector v a => Mat v a
+empty = Mat H.empty
+{-# INLINE empty #-}
 
--- is it worth sharing these?
 ident :: (G.Vector v a, Num a) => Word32 -> Mat v a
-ident w = mat 0 0 w w $ H.fromListN (fromIntegral w) [(key i i, 1) | i <- [0 .. w - 1]]
+ident w = Mat $ H.generate (fromIntegral w) $ \i -> let i' = fromIntegral i in (key i' i', 1)
 {-# INLINE ident #-}
 
--- break into 2-fat quadrants.
+{-
+-- | partition (and rejoin) along the major axis into a 2-fat component and the remainder.
 --
 -- Note: the keys have 'junk' on the top of the keys, but it should be exactly the junk we need them to have when we rejoin the quadrants
+--       or reassemble a key from matrix multiplication.
+--
 -- @mlzs@ gives you enough information to be able to trim them otherwise.
+
+split :: G.Vector v a => IndexedTraversal' (Bool, Int) (Mat v a) (Mat v a, Mat v a)
+split f m@(Mat mask body@(H.V ks _))
+  | n < 2     = pure m
+  | otherwise = f (m0,m1) <&> \ (Mat _ u,Mat _ v) -> Mat mask (u ++ v)
+  where
+    lo = head ks
+    hi = last ks
+    xor lo hi
+
+
 quadrants :: G.Vector v a => Lens' (Mat v a) (Mat v a, Mat v a, Mat v a, Mat v a)
-quadrants f (Mat lzs i0 j0 h w body@(H.V ks _)) =
+quadrants f (Mat lzs body@(H.V ks _)) =
   f ( m00, m01, m10, m11) <&> \ (m00', m01', m10', m11') -> Mat lzs i0 j0 h w $
       G.unstream $ concatFour (G.stream (_matBody m00')) (G.stream (_matBody m01')) (G.stream (_matBody m10')) (G.stream (_matBody m11'))
   where
@@ -196,6 +199,7 @@ fattest y0 = unsafeShiftR x5 1 + 1 where
   x4 = x3 .|. unsafeShiftR x3 8
   x5 = x4 .|. unsafeShiftR x4 16
 {-# INLINE fattest #-}
+-}
 
 -- | assuming @l <= h@. Returns @h@ if the predicate is never @True@ over @[l..h)@
 search :: (Int -> Bool) -> Int -> Int -> Int
@@ -207,6 +211,7 @@ search p = go where
     where m = l + div (h-l) 2
 {-# INLINE search #-}
 
+{-
 {-
 mergeMatricesWith :: (a -> a -> Maybe a) -> Mat v a -> Mat v a -> Mat v a
 mergeMatricesWith = undefined
@@ -236,3 +241,4 @@ insert cmp a l = loop
                       LT -> GM.unsafeWrite a j e >> loop val (j - 1)
                       _  -> GM.unsafeWrite a j val
 {-# INLINE insert #-}
+-}
