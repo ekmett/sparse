@@ -88,28 +88,31 @@ instance (G.Vector v a, Show a) => Show (Mat v a) where
 instance (G.Vector v a, Read a) => Read (Mat v a) where
   readsPrec d r = [ (Mat m, t) | (m, t) <- readsPrec d r ]
 
+-- | This isomorphism lets you access the internal structure of a matrix
 _Mat :: Iso (Mat u a) (Mat v b) (H.Vector U.Vector u (Key, a)) (H.Vector U.Vector v (Key, b))
 _Mat = iso runMat Mat
 {-# INLINE _Mat #-}
 
-keys :: Lens (H.Vector u v (a,b)) (H.Vector w v (c,b)) (u a) (w c)
-keys f (H.V ks vs) = f ks <&> \ks' -> H.V ks' vs
+-- | Access the keys of a matrix
+keys :: Lens' (Mat v a) (U.Vector Key)
+keys f = _Mat $ \ (H.V ks vs) -> f ks <&> \ks' -> H.V ks' vs
 {-# INLINE keys #-}
 
-values :: Lens (H.Vector u v (a,b)) (H.Vector u w (a,c)) (v b) (w c)
-values f (H.V ks vs) = f vs <&> \vs' -> H.V ks vs'
+-- | Access the keys of a matrix
+values :: Lens (Mat u a) (Mat v b) (u a) (v b)
+values f = _Mat $ \ (H.V ks vs) -> f vs <&> \vs' -> H.V ks vs'
 {-# INLINE values #-}
 
 instance Functor v => Functor (Mat v) where
-  fmap = over (_Mat.values.mapped)
+  fmap = over (values.mapped)
   {-# INLINE fmap #-}
 
 instance Foldable v => Foldable (Mat v) where
-  foldMap = foldMapOf (_Mat.values.folded)
+  foldMap = foldMapOf (values.folded)
   {-# INLINE foldMap #-}
 
 instance Traversable v => Traversable (Mat v) where
-  traverse = _Mat.values.traverse
+  traverse = values.traverse
   {-# INLINE traverse #-}
 
 type instance IxValue (Mat v a) = a
@@ -196,6 +199,10 @@ instance (G.Vector v a, Num a, Eq0 a) => Num (Mat v a) where
         | otherwise -> Just c
   {-# INLINE (*) #-}
 
+-- | Remove results that are equal to zero from a simpler function.
+--
+-- When used with @addWith@ or @multiplyWith@'s additive argumnt
+-- this can help retain the sparsity of the matrix.
 nonZero :: Eq0 c => (a -> b -> c) -> a -> b -> Maybe c
 nonZero f a b = case f a b of
   c | isZero c -> Nothing

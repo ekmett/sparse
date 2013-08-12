@@ -1,5 +1,15 @@
 {-# LANGUAGE BangPatterns #-}
-
+-----------------------------------------------------------------------------
+-- |
+-- Copyright   :  (C) 2013 Edward Kmett
+-- License     :  BSD-style (see the file LICENSE)
+-- Maintainer  :  Edward Kmett <ekmett@gmail.com>
+-- Stability   :  experimental
+-- Portability :  non-portable
+--
+-- Matrix stream fusion internals
+--
+-----------------------------------------------------------------------------
 module Sparse.Matrix.Fusion
   ( mergeStreamsWith
   , timesSingleton
@@ -12,6 +22,7 @@ import Data.Vector.Fusion.Stream.Size
 import Data.Word
 import Sparse.Matrix.Key
 
+-- | This is the internal stream fusion combinator used to merge streams for addition.
 mergeStreamsWith :: (Monad m, Ord i) => (a -> a -> Maybe a) -> Stream m (i, a) -> Stream m (i, a) -> Stream m (i, a)
 mergeStreamsWith f (Stream stepa sa0 na) (Stream stepb sb0 nb)
   = Stream step (MergeStart sa0 sb0) (toMax na + toMax nb) where
@@ -58,6 +69,7 @@ mergeStreamsWith f (Stream stepa sa0 na) (Stream stepb sb0 nb)
   {-# INLINE [0] step #-}
 {-# INLINE [1] mergeStreamsWith #-}
 
+-- | The state for 'Stream' fusion that is used by 'mergeStreamsWith'.
 data MergeState sa sb i a
   = MergeL sa sb i a
   | MergeR sa sb i a
@@ -68,7 +80,10 @@ data MergeState sa sb i a
 m1, m2 :: Word64
 m1 = 0xAAAAAAAAAAAAAAAA
 m2 = 0x5555555555555555
+{-# INLINE m1 #-}
+{-# INLINE m2 #-}
 
+-- | This is the internal stream fusion combinator used to multiply on the right by a singleton key
 timesSingleton :: Monad m => (a -> b -> c) -> Stream m (Key, a) -> (Key, b) -> Stream m (Key, c)
 timesSingleton f (Stream stepa sa0 na) (Key jk, b) = Stream step sa0 (toMax na) where
   !jj = unsafeShiftR (jk .&. m1) 1
@@ -84,6 +99,7 @@ timesSingleton f (Stream stepa sa0 na) (Key jk, b) = Stream step sa0 (toMax na) 
   {-# INLINE [0] step #-}
 {-# INLINE [1] timesSingleton #-}
 
+-- | This is the internal stream fusion combinator used to multiply on the left by a singleton key
 singletonTimes :: Monad m => (a -> b -> c) -> (Key, a) -> Stream m (Key, b) -> Stream m (Key, c)
 singletonTimes f (Key ij, a) (Stream  stepb sb0 nb) = Stream step sb0 (toMax nb) where
   !jj = unsafeShiftL (ij .&. m2) 1
