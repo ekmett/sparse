@@ -1,4 +1,5 @@
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE PatternGuards #-}
 module Main where
 
 import Control.Applicative
@@ -26,8 +27,12 @@ type Linear a = Map Word32 (Map Word32 a)
 nonEmpty :: Lens' (Maybe (Map k Int)) (Map k Int)
 nonEmpty f m = f (fromMaybe M.empty m) <&> \ m -> m <$ guard (not (M.null m))
 
+-- | matrix multiplication in linear will leave empty maps inside the outer map in sparse multiplication
+sane :: Linear Int -> Linear Int
+sane = M.filter (not . M.null)
+
 toLinear :: Mat U.Vector Int -> Linear Int
-toLinear = H.foldr (\(k,v) r -> r & at (k^._1) . nonEmpty . at (k^._2) ?~ v) M.empty . runMat
+toLinear = sane . H.foldr (\(k,v) r -> r & at (k^._1) . nonEmpty . at (k^._2) ?~ v) M.empty . runMat
 
 fromLinear :: Linear Int -> Mat U.Vector Int
 fromLinear m = SM.fromList $ do
@@ -35,10 +40,22 @@ fromLinear m = SM.fromList $ do
   (j, a) <- M.toList n
   return (key i j, a)
 
-prop_to_from x = toLinear (fromLinear x) == M.filter (not . M.null) x
+prop_to_from x = toLinear (fromLinear x) == sane x
 prop_from_to x = fromLinear (toLinear x) == x
 
-prop_model :: Mat U.Vector Int -> Mat U.Vector Int -> Bool
-prop_model x y = toLinear (x * y) == M.filter (not . M.null) (toLinear x !*! toLinear y)
+prop_old :: Mat U.Vector Int -> Mat U.Vector Int -> Gen Prop
+prop_old x y | z <- multiplyWithOld (*) (nonZero (+)) x y, z' <- fromLinear (toLinear x !*! toLinear y)
+  = label (show z Prelude.++ " == " Prelude.++ show z') (z == z')
+
+prop_new :: Mat U.Vector Int -> Mat U.Vector Int -> Gen Prop
+prop_new x y | z <- multiplyWithNew (*) (nonZero (+)) x y, z' <- fromLinear (toLinear x !*! toLinear y)
+  = label (show z Prelude.++ " == " Prelude.++ show z') (z == z')
+
+prop_regress :: Mat U.Vector Int -> Mat U.Vector Int -> Bool
+prop_regress x y = multiplyWithNew (*) (nonZero (+)) x y == multiplyWithOld (*) (nonZero (+)) x y
+
+prop_model :: Mat U.Vector Int -> Mat U.Vector Int -> Gen Prop
+prop_model x y | z <- x * y, z' <- fromLinear (toLinear x !*! toLinear y)
+  = label (show z Prelude.++ " == " Prelude.++ show z') (z == z')
 
 main = $defaultMainGenerator

@@ -42,7 +42,7 @@ module Sparse.Matrix
   , Eq0(..)
   -- * Customization
   , addWith
-  , multiplyWith
+  , multiplyWith, multiplyWithOld, multiplyWithNew
   , nonZero
   -- * Lenses
   , _Mat, keys, values
@@ -59,9 +59,12 @@ import qualified Data.Vector.Hybrid as H
 import qualified Data.Vector.Hybrid.Internal as H
 import qualified Data.Vector.Unboxed as U
 import Data.Word
+import Prelude hiding (head, last)
 import Sparse.Matrix.Fusion
 import Sparse.Matrix.Key
 
+import Debug.Trace
+import Numeric.Lens
 -- * Distinguishable Zero
 
 class Eq0 a where
@@ -256,10 +259,9 @@ critical (Mat (H.V ks _)) = smear (xor lo hi)  where -- `xor` unsafeShiftR bits 
 -- Note: the keys have 'junk' on the top of the keys, but it should be exactly the junk we need them to have when we rejoin the quadrants
 --       or reassemble a key from matrix multiplication!
 split :: G.Vector v a => Word64 -> Mat v a -> (Mat v a, Mat v a)
-split mask (Mat h@(H.V ks _)) = (Mat m0, Mat m1)
+split crit (Mat h@(H.V ks _)) = (Mat m0, Mat m1)
   where
     !n = U.length ks
-    !crit = mask `xor` unsafeShiftR mask 1
     !k = search (\i -> runKey (ks U.! i) .&. crit /= 0) 0 n
     (m0,m1) = H.splitAt k h
 {-# INLINE split #-}
@@ -272,8 +274,11 @@ addWith f xs ys = Mat (G.unstream (mergeStreamsWith f (G.stream (runMat xs)) (G.
 {-# INLINE addWith #-}
 
 -- | Multiply two matrices using the specified multiplication and addition operation.
-multiplyWith :: G.Vector v a => (a -> a -> a) -> (a -> a -> Maybe a) -> Mat v a -> Mat v a -> Mat v a
-multiplyWith times plus x0 y0 = case compare (count x0) 1 of
+--
+-- reference implementation
+multiplyWithOld :: G.Vector v a => (a -> a -> a) -> (a -> a -> Maybe a) -> Mat v a -> Mat v a -> Mat v a
+{-# INLINE multiplyWithOld #-}
+multiplyWithOld times plus x0 y0 = case compare (count x0) 1 of
   LT -> Mat H.empty
   EQ -> go1n x0 y0
   GT -> case compare (count y0) 1 of
@@ -289,10 +294,10 @@ multiplyWith times plus x0 y0 = case compare (count x0) 1 of
                | otherwise = go cx x (critical y) y
     {-# INLINE goR #-}
     go cx x cy y -- choose and execute a split
-      | cx >= cy = case split cx x of
+      | cx >= cy = case split (cx `xor` unsafeShiftR cx 1) x of
         (m0,m1) | parity cx -> goL m0 cy y `add` goL m1 cy y -- merge left and right traced out regions
                 | otherwise -> goL m0 cy y `fby` goL m1 cy y -- top and bottom
-      | otherwise = case split cy y of
+      | otherwise = case split (cy `xor` unsafeShiftR cy 1) y of
         (m0,m1) | parity cy -> goR cx x m0 `fby` goR cx x m1 -- left and right
                 | otherwise -> goR cx x m0 `add` goR cx x m1 -- merge top and bottom traced out regions
     gon1 (Mat x) (Mat y) = Mat $ H.modify (Intro.sortBy (compare `on` fst)) $ G.unstream (timesSingleton times (G.stream x) (H.head y))
@@ -303,4 +308,79 @@ multiplyWith times plus x0 y0 = case compare (count x0) 1 of
     {-# INLINE add #-}
     fby (Mat l) (Mat r) = Mat (l H.++ r)
     {-# INLINE fby #-}
+
+multiplyWith :: G.Vector v a => (a -> a -> a) -> (a -> a -> Maybe a) -> Mat v a -> Mat v a -> Mat v a
+multiplyWith = multiplyWithOld
 {-# INLINE multiplyWith #-}
+
+-- | Multiply two matrices using the specified multiplication and addition operation.
+multiplyWithNew :: G.Vector v a => (a -> a -> a) -> (a -> a -> Maybe a) -> Mat v a -> Mat v a -> Mat v a
+{-# INLINE multiplyWithNew #-}
+multiplyWithNew times plus x0 y0 = case compare (count x0) 1 of
+  LT -> Mat H.empty
+  EQ -> go1n (lo x0) (head x0) (lo y0) y0 (hi y0)
+  GT -> case compare (count y0) 1 of
+      LT -> Mat H.empty
+      EQ -> gon1 (lo x0) x0 (hi x0) (lo y0) (head y0)
+      GT -> go   (lo x0) x0 (hi x0) (lo y0) y0 (hi y0)
+  where
+    goL0 xa x ya y yb
+      | count x == 1 = go1n xa (head x) ya y yb
+      | otherwise    = go xa x (hi x) ya y yb
+    {-# INLINE goL0 #-}
+
+    goL1 x xb ya y yb
+      | count x == 1 = go1n xb (head x) ya y yb
+      | otherwise    = go (lo x) x xb ya y yb
+    {-# INLINE goL1 #-}
+
+    goR0 xa x xb ya y
+      | count y == 1 = gon1 xa x xb ya (head y)
+      | otherwise    = go xa x xb ya y (hi y)
+    {-# INLINE goR0 #-}
+
+    goR1 xa x xb y yb
+      | count y == 1 = gon1 xa x xb yb (head y)
+      | otherwise    = go xa x xb (lo y) y yb
+    {-# INLINE goR1 #-}
+
+    -- x and y have at lo 2 non-zero elements each
+    go xa x xb ya y yb
+      | cm <- complement evenMask
+      , unsafeShiftL (cm .&. 0x5555555555555555 .&. xa) 1 /= cm .&. 0xAAAAAAAAAAAAAAAA .&. yb = traceShow (base 2 # xa, base 2 # yb) (Mat H.empty) -- we disagree on the joining column
+      | mx .&. crit /= 0 = case split crit x of -- then this is the most significant difference
+        (m0,m1) | oddity      -> goL0 xa m0 ya y yb `add` goL1 m1 xb ya y yb -- we split on j so we have to merge
+                | otherwise   -> goL0 xa m0 ya y yb `fby` goL1 m1 xb ya y yb -- we split on i so we can concatenate
+      | otherwise = case split crit y of        -- then this is the most significant
+        (m0,m1) | oddity      -> goR0 xa x xb ya m0 `fby` goR1 xa x xb m1 yb -- we split on k so we can concatenate
+                | otherwise   -> goR0 xa x xb ya m0 `add` goR1 xa x xb m1 yb -- we split on j so we have to merge
+      where
+        mx     = xor xa xb
+        mask   = smear (mx .|. xor ya yb)
+        oddity = parity mask
+        evenMask
+          | oddity = unsafeShiftL mask 1 .|. 1
+          | otherwise   = mask
+        crit = mask `xor` unsafeShiftR mask 1
+
+    gon1 _ (Mat x) _ yb b = Mat $ H.modify (Intro.sortBy (compare `on` fst)) $ G.unstream (timesSingleton times (G.stream x) (Key yb, b))
+    {-# INLINE gon1 #-}
+
+    go1n xa a _ (Mat y) _ = Mat $ H.modify (Intro.sortBy (compare `on` fst)) $ G.unstream (singletonTimes times (Key xa, a) (G.stream y))
+    {-# INLINE go1n #-}
+
+    add = addWith plus
+    {-# INLINE add #-}
+
+    fby (Mat l) (Mat r) = Mat (l H.++ r)
+    {-# INLINE fby #-}
+
+    lo (Mat (H.V k _)) = runKey (U.head k)
+    {-# INLINE lo #-}
+
+    hi (Mat (H.V k _)) = runKey (U.last k)
+    {-# INLINE hi #-}
+
+    head :: G.Vector v a => Mat v a -> a
+    head (Mat (H.V _ v)) = G.head v
+    {-# INLINE head #-}

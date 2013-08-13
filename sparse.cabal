@@ -28,6 +28,10 @@ flag test-properties
   default: True
   manual: True
 
+flag optimize
+  default: False
+  manual: True
+
 library
   build-depends:
     base              >= 4     && < 5,
@@ -47,7 +51,11 @@ library
     Sparse.Matrix.Fusion
     Sparse.Matrix.Key
 
-  ghc-options: -Wall -O2
+  ghc-options: -Wall
+  if flag(optimize)
+    ghc-options: -O2
+  else
+    ghc-options: -O0
 
   if impl(ghc<6.13)
     Ghc-Options: -finline-if-enough-args -fno-method-sharing
@@ -66,10 +74,10 @@ test-suite properties
       hybrid-vectors,
       lens,
       linear                     >= 1.2 && < 2,
-      QuickCheck                 >= 2.4,
+      QuickCheck                 >= 2.5,
       sparse,
       test-framework             >= 0.6,
-      test-framework-quickcheck2 >= 0.2,
+      test-framework-quickcheck2 >= 0.3,
       test-framework-th          >= 0.2,
       transformers,
       vector
