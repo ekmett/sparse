@@ -2,7 +2,7 @@ name:          sparse
 category:      Data, Vector
 version:       0.1
 license:       BSD3
-cabal-version: >= 1.6
+cabal-version: >= 1.8
 license-file:  LICENSE
 author:        Edward A. Kmett
 maintainer:    Edward A. Kmett <ekmett@gmail.com>
@@ -22,6 +22,11 @@ description: A playground of sparse linear algebra primitives using Morton order
 source-repository head
   type: git
   location: git://github.com/ekmett/sparse.git
+
+-- Build the properties test if we're building tests
+flag test-properties
+  default: True
+  manual: True
 
 library
   build-depends:
@@ -46,3 +51,25 @@ library
 
   if impl(ghc<6.13)
     Ghc-Options: -finline-if-enough-args -fno-method-sharing
+
+test-suite properties
+  type: exitcode-stdio-1.0
+  main-is: properties.hs
+  hs-source-dirs: tests
+  ghc-options: -w -threaded -rtsopts -with-rtsopts=-N -fsimpl-tick-factor=400
+  if !flag(test-properties)
+    buildable: False
+  else
+    build-depends:
+      base,
+      containers,
+      hybrid-vectors,
+      lens,
+      linear                     >= 1.2 && < 2,
+      QuickCheck                 >= 2.4,
+      sparse,
+      test-framework             >= 0.6,
+      test-framework-quickcheck2 >= 0.2,
+      test-framework-th          >= 0.2,
+      transformers,
+      vector
