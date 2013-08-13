@@ -210,54 +210,6 @@ nonZero f a b = case f a b of
     | otherwise -> Just c
 {-# INLINE nonZero #-}
 
--- | Merge two matrices where the indices coincide into a new matrix. This provides for generalized
--- addition. Return 'Nothing' for zero.
---
-addWith :: G.Vector v a => (a -> a -> Maybe a) -> Mat v a -> Mat v a -> Mat v a
-addWith f xs ys = Mat (G.unstream (mergeStreamsWith f (G.stream (runMat xs)) (G.stream (runMat ys))))
-{-# INLINE addWith #-}
-
--- | Multiply two matrices using the specified multiplication and addition operation.
---
--- We can work with the Boolean semiring as a @Mat Data.Vector.Unboxed.Vector ()@ using:
---
--- @
--- booleanOr = addWith (const . Just)
--- booleanAnd = multiplyWith const (const . Just)
--- @
-multiplyWith :: G.Vector v a => (a -> a -> a) -> (a -> a -> Maybe a) -> Mat v a -> Mat v a -> Mat v a
-multiplyWith times plus x0 y0 = case compare (count x0) 1 of
-  LT -> Mat H.empty
-  EQ -> go1n x0 y0
-  GT -> goR (critical x0) x0 y0
-  where
-    goL x cy y = case compare (count x) 1 of -- we need to check th count of the left hand matrix
-      LT -> Mat H.empty
-      EQ -> go1n x y
-      GT -> go (critical x) x cy y
-    {-# INLINE goL #-}
-    goR cx x y = case compare (count y) 1 of -- we need to check the count of the right hand matrix
-      LT -> Mat H.empty
-      EQ -> gon1 x y
-      GT -> go cx x (critical y) y
-    {-# INLINE goR #-}
-    go cx x cy y -- choose and execute a split
-       | cx >= cy = case split cx x of
-         (m0,m1) | parity cx -> goL m0 cy y `add` goL m1 cy y -- merge left and right traced out regions
-                 | otherwise -> goL m0 cy y `fby` goL m1 cy y -- top and bottom
-       | otherwise = case split cy y of
-         (m0,m1) | parity cy -> goR cx x m0 `fby` goR cx x m1 -- left and right
-                 | otherwise -> goR cx x m0 `add` goR cx x m1 -- merge top and bottom traced out regions
-    gon1 (Mat x) (Mat y) = Mat $ H.modify (Intro.sortBy (compare `on` fst)) $ G.unstream (timesSingleton times (G.stream x) (H.head y))
-    {-# INLINE gon1 #-}
-    go1n (Mat x) (Mat y) = Mat $ H.modify (Intro.sortBy (compare `on` fst)) $ G.unstream (singletonTimes times (H.head x) (G.stream y))
-    {-# INLINE go1n #-}
-    add x y = addWith plus x y
-    {-# INLINE add #-}
-    fby (Mat l) (Mat r) = Mat (l H.++ r)
-    {-# INLINE fby #-}
-{-# INLINE multiplyWith #-}
-
 -- * Utilities
 
 -- | assuming @l <= h@. Returns @h@ if the predicate is never @True@ over @[l..h)@
@@ -311,3 +263,44 @@ split mask (Mat h@(H.V ks _)) = (Mat m0, Mat m1)
     !k = search (\i -> runKey (ks U.! i) .&. crit /= 0) 0 n
     (m0,m1) = H.splitAt k h
 {-# INLINE split #-}
+
+-- | Merge two matrices where the indices coincide into a new matrix. This provides for generalized
+-- addition. Return 'Nothing' for zero.
+--
+addWith :: G.Vector v a => (a -> a -> Maybe a) -> Mat v a -> Mat v a -> Mat v a
+addWith f xs ys = Mat (G.unstream (mergeStreamsWith f (G.stream (runMat xs)) (G.stream (runMat ys))))
+{-# INLINE addWith #-}
+
+-- | Multiply two matrices using the specified multiplication and addition operation.
+multiplyWith :: G.Vector v a => (a -> a -> a) -> (a -> a -> Maybe a) -> Mat v a -> Mat v a -> Mat v a
+multiplyWith times plus x0 y0 = case compare (count x0) 1 of
+  LT -> Mat H.empty
+  EQ -> go1n x0 y0
+  GT -> case compare (count y0) 1 of
+      LT -> Mat H.empty
+      EQ -> gon1 x0 y0
+      GT -> go (critical x0) x0 (critical y0) y0
+  where
+    goL x cy y
+      | count x == 1 = go1n x y
+      | otherwise = go (critical x) x cy y
+    {-# INLINE goL #-}
+    goR cx x y | count y == 1 = gon1 x y
+               | otherwise = go cx x (critical y) y
+    {-# INLINE goR #-}
+    go cx x cy y -- choose and execute a split
+      | cx >= cy = case split cx x of
+        (m0,m1) | parity cx -> goL m0 cy y `add` goL m1 cy y -- merge left and right traced out regions
+                | otherwise -> goL m0 cy y `fby` goL m1 cy y -- top and bottom
+      | otherwise = case split cy y of
+        (m0,m1) | parity cy -> goR cx x m0 `fby` goR cx x m1 -- left and right
+                | otherwise -> goR cx x m0 `add` goR cx x m1 -- merge top and bottom traced out regions
+    gon1 (Mat x) (Mat y) = Mat $ H.modify (Intro.sortBy (compare `on` fst)) $ G.unstream (timesSingleton times (G.stream x) (H.head y))
+    {-# INLINE gon1 #-}
+    go1n (Mat x) (Mat y) = Mat $ H.modify (Intro.sortBy (compare `on` fst)) $ G.unstream (singletonTimes times (H.head x) (G.stream y))
+    {-# INLINE go1n #-}
+    add = addWith plus
+    {-# INLINE add #-}
+    fby (Mat l) (Mat r) = Mat (l H.++ r)
+    {-# INLINE fby #-}
+{-# INLINE multiplyWith #-}
