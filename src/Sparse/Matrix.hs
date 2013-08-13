@@ -81,6 +81,7 @@ instance Eq0 Double
 -- * Sparse Matrices
 
 newtype Mat v a = Mat { runMat :: H.Vector U.Vector v (Key, a) }
+  deriving (Eq,Ord)
 
 instance (G.Vector v a, Show a) => Show (Mat v a) where
   showsPrec d (Mat v) = showsPrec d v
@@ -133,19 +134,19 @@ instance (Applicative f, G.Vector v a) => Ixed f (Mat v a) where
     where l = search (\j -> (ks U.! j) >= i) 0 (U.length ks)
   {-# INLINE ix #-}
 
-{-
 instance G.Vector v a => At (Mat v a) where
-  at i f m@(Mat (H.V ks vs)) = case ks U.!? l of
+  at i f (Mat kvs@(H.V ks vs)) = case ks U.!? l of
     Just j
       | i == j -> indexed f i (Just (vs G.! l)) <&> \mv -> case mv of
         Just v  -> Mat $ H.V ks (vs G.// [(l,v)])
-        Nothing  -> undefined -- TODO: delete
+        Nothing  -> case H.splitAt l kvs of
+          (x,y) -> Mat (x H.++ H.tail y)
     _ -> indexed f i Nothing <&> \mv -> case mv of
-        Just _v -> undefined -- TODO: insert v
-        Nothing -> m
+        Just v -> case H.splitAt l kvs of -- TODO: insert v
+          (x,y) -> Mat (x H.++ H.cons (i,v) y)
+        Nothing -> Mat kvs
     where l = search (\j -> (ks U.! j) >= i) 0 (U.length ks)
   {-# INLINE at #-}
--}
 
 instance Eq0 (Mat v a) where
   isZero = H.null . runMat
@@ -310,19 +311,3 @@ split mask (Mat h@(H.V ks _)) = (Mat m0, Mat m1)
     !k = search (\i -> runKey (ks U.! i) .&. crit /= 0) 0 n
     (m0,m1) = H.splitAt k h
 {-# INLINE split #-}
-
-{-
--- Given a sorted array in [l,u), inserts val into its proper position,
--- yielding a sorted [l,u]
-insert :: (PrimMonad m, GM.MVector v e) => (e -> e -> Ordering) -> v (PrimState m) e -> Int -> e -> Int -> m ()
-insert cmp a l = loop
- where
- loop val j
-   | j <= l    = GM.unsafeWrite a l val
-   | otherwise = do e <- GM.unsafeRead a (j - 1)
-                    case cmp val e of
-                      LT -> GM.unsafeWrite a j e >> loop val (j - 1)
-                      _  -> GM.unsafeWrite a j val
-{-# INLINE insert #-}
--}
-
