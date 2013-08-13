@@ -290,8 +290,9 @@ multiplyWithOld times plus x0 y0 = case compare (count x0) 1 of
       | count x == 1 = go1n x y
       | otherwise = go (critical x) x cy y
     {-# INLINE goL #-}
-    goR cx x y | count y == 1 = gon1 x y
-               | otherwise = go cx x (critical y) y
+    goR cx x y 
+      | count y == 1 = gon1 x y
+      | otherwise = go cx x (critical y) y
     {-# INLINE goR #-}
     go cx x cy y -- choose and execute a split
       | cx >= cy = case split (cx `xor` unsafeShiftR cx 1) x of
@@ -310,7 +311,7 @@ multiplyWithOld times plus x0 y0 = case compare (count x0) 1 of
     {-# INLINE fby #-}
 
 multiplyWith :: G.Vector v a => (a -> a -> a) -> (a -> a -> Maybe a) -> Mat v a -> Mat v a -> Mat v a
-multiplyWith = multiplyWithOld
+multiplyWith = multiplyWithNew
 {-# INLINE multiplyWith #-}
 
 -- | Multiply two matrices using the specified multiplication and addition operation.
@@ -365,22 +366,16 @@ multiplyWithNew times plus x0 y0 = case compare (count x0) 1 of
 
     gon1 _ (Mat x) _ yb b = Mat $ H.modify (Intro.sortBy (compare `on` fst)) $ G.unstream (timesSingleton times (G.stream x) (Key yb, b))
     {-# INLINE gon1 #-}
-
     go1n xa a _ (Mat y) _ = Mat $ H.modify (Intro.sortBy (compare `on` fst)) $ G.unstream (singletonTimes times (Key xa, a) (G.stream y))
     {-# INLINE go1n #-}
-
     add = addWith plus
     {-# INLINE add #-}
-
     fby (Mat l) (Mat r) = Mat (l H.++ r)
     {-# INLINE fby #-}
-
     lo (Mat (H.V k _)) = runKey (U.head k)
     {-# INLINE lo #-}
-
     hi (Mat (H.V k _)) = runKey (U.last k)
     {-# INLINE hi #-}
-
     head :: G.Vector v a => Mat v a -> a
     head (Mat (H.V _ v)) = G.head v
     {-# INLINE head #-}
