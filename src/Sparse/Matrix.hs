@@ -63,8 +63,9 @@ import Prelude hiding (head, last)
 import Sparse.Matrix.Fusion
 import Sparse.Matrix.Key
 
-import Debug.Trace
-import Numeric.Lens
+-- import Debug.Trace
+-- import Numeric.Lens
+
 -- * Distinguishable Zero
 
 class Eq0 a where
@@ -348,7 +349,7 @@ multiplyWithNew times plus x0 y0 = case compare (count x0) 1 of
     -- x and y have at lo 2 non-zero elements each
     go xa x xb ya y yb
       | cm <- complement evenMask
-      , unsafeShiftL (cm .&. 0x5555555555555555 .&. xa) 1 /= cm .&. 0xAAAAAAAAAAAAAAAA .&. yb = traceShow (base 2 # xa, base 2 # yb) (Mat H.empty) -- we disagree on the joining column
+      , unsafeShiftL (cm .&. 0x5555555555555555 .&. xa) 1 /= cm .&. 0xAAAAAAAAAAAAAAAA .&. yb = Mat H.empty -- we disagree on the joining index, so short circuit
       | mx .&. crit /= 0 = case split crit x of -- then this is the most significant difference
         (m0,m1) | oddity      -> goL0 xa m0 ya y yb `add` goL1 m1 xb ya y yb -- we split on j so we have to merge
                 | otherwise   -> goL0 xa m0 ya y yb `fby` goL1 m1 xb ya y yb -- we split on i so we can concatenate
