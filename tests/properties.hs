@@ -12,8 +12,8 @@ import Data.Vector.Unboxed as U
 import Data.Vector.Hybrid as H
 import Data.Vector.Generic as G
 import Data.Word
+import Instances
 import Sparse.Matrix as SM
-import Sparse.Matrix.Properties
 import Test.Framework.TH
 import Test.Framework.Providers.QuickCheck2
 import Test.QuickCheck

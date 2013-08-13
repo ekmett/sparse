@@ -1,4 +1,6 @@
-module Sparse.Matrix.Properties () where
+-- these can't be in 'Properties.hs' or the splice fails
+
+module Instances () where
 
 import Control.Applicative
 import Data.List (nubBy)
