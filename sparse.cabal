@@ -89,3 +89,17 @@ test-suite properties
       test-framework-th          >= 0.2,
       transformers,
       vector
+
+-- matrix-matrix multiplication
+benchmark mm
+  type:           exitcode-stdio-1.0
+  main-is:        mm.hs
+  ghc-options:    -Wall -O2 -threaded -fdicts-cheap -funbox-strict-fields -fsimpl-tick-factor=400000
+  hs-source-dirs: benchmarks
+  build-depends:
+    array,
+    base,
+    criterion,
+    deepseq,
+    sparse,
+    vector
