@@ -1,5 +1,6 @@
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE DefaultSignatures #-}
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE FlexibleContexts #-}
@@ -99,7 +100,7 @@ unshuffle (Key k0) = (fromIntegral (unsafeShiftR k5 32), fromIntegral k5) where
   k5 = k4 `xor` t4 `xor` unsafeShiftL t4 16
 {-# INLINE unshuffle #-}
 
-instance Field1 Key Key Word32 Word32 where
+instance (a ~ Word32, b ~ Word32) => Field1 Key Key a b where
   _1 f (Key ij) = indexed f (0 :: Int) (fromIntegral k5) <&> \i -> let
          i0 = fromIntegral i
          i1 = unsafeShiftL (i0 .&. 0x00000000FFFF0000) 16 .|. i0 .&. 0xFFFF00000000FFFF
@@ -118,7 +119,7 @@ instance Field1 Key Key Word32 Word32 where
   -- _1 = unshuffled._1 -- reference implementation
   {-# INLINE _1 #-}
 
-instance Field2 Key Key Word32 Word32 where
+instance (a ~ Word32, b ~ Word32) => Field2 Key Key a b where
   _2 f (Key ij) = indexed f (1 :: Int) (fromIntegral k5) <&> \j -> let
          j0 = fromIntegral j
          j1 = unsafeShiftL (j0 .&. 0x00000000FFFF0000) 16 .|. j0 .&. 0xFFFF00000000FFFF
