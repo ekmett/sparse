@@ -14,7 +14,7 @@ import GHC.Ptr (castPtr)
 
 import Numerics.Simple.Util
 
-foreign import ccall unsafe "testAppleBlas.c simple_dgemm"
+foreign import ccall unsafe "cblas.c simple_dgemm"
     dgemm :: Ptr CDouble -> Ptr CDouble -> Ptr CDouble -> CInt -> IO ()
 
 saphWrapper :: (Ptr CDouble -> Ptr CDouble -> Ptr CDouble -> CInt -> IO ())-> ( Ptr Double -> Ptr Double -> Ptr Double -> Int -> IO ())
