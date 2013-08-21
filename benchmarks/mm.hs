@@ -4,21 +4,22 @@ import Data.Array.Unboxed as A
 import Data.Vector.Generic as G
 import Data.Vector.Unboxed as U
 import Sparse.Matrix as M
+import Sparse.Matrix.Heap as Heap
 
 instance NFData (UArray i e)
 
 main :: IO ()
 main = defaultMain
   [ bench "naive I_32"  $ nf (\x -> mmul x x) $ array ((0,0),(31,31)) $ [ ((i, j), if i == j then 1 else 0) | i <- [0..31], j <- [0..31] ]
-  , bench "I_32"        $ nf (\x -> x * x) (ident 32 :: Mat U.Vector Int)
-  , bench "I_64"        $ nf (\x -> x * x) (ident 64 :: Mat U.Vector Int)
-  , bench "I_128"       $ nf (\x -> x * x) (ident 128 :: Mat U.Vector Int)
+  , bench "I_32 new"     $ nf (\x -> x * x) (ident 32 :: Mat U.Vector Int)
+  , bench "I_64 new"     $ nf (\x -> x * x) (ident 64 :: Mat U.Vector Int)
+  , bench "I_128 new"    $ nf (\x -> x * x) (ident 128 :: Mat U.Vector Int)
   -- , bench "I_256"       $ nf (\x -> x * x) (ident 256 :: Mat U.Vector Int)
   -- , bench "I_512"      $ nf (\x -> x * x) (ident 1024 :: Mat U.Vector Int)
   -- , bench "I_1024"      $ nf (\x -> x * x) (ident 1024 :: Mat U.Vector Int)
-  , bench "naive 32x32" $ nf (\x -> mmul x x) $ listArray ((0,0),(31,31)) $ Prelude.replicate (32*32) 1
-  , bench "32x32 Int"   $ nf (\x -> x * x) blockInt
-  , bench "32x32 ()"    $ nf (\x -> multiplyWithNew const (const . Just) x x) blockUnit
+  , bench "naive 32x32"  $ nf (\x -> mmul x x) $ listArray ((0,0),(31,31)) $ Prelude.replicate (32*32) 1
+  , bench "32x32 Int"    $ nf (\x -> x * x) blockInt
+  , bench "32x32 ()"     $ nf (\x -> multiplyWith const (Heap.streamHeapWith const) x x) blockUnit
   ]
 
 blockInt :: Mat U.Vector Int

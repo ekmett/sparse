@@ -42,11 +42,12 @@ library
     bits              >= 0.3.2 && < 1,
     contravariant     >= 0.4.2 && < 1,
     deepseq           >= 1.1   && < 1.4,
+    hybrid-vectors    >= 0.1   && < 1,
     lens              >= 3.9   && < 4,
     primitive         >= 0.5   && < 0.6,
+    transformers      >= 0.3   && < 0.4,
     vector            >= 0.10  && < 0.11,
-    vector-algorithms >= 0.5   && < 0.6,
-    hybrid-vectors    >= 0.1   && < 1
+    vector-algorithms >= 0.5   && < 0.6
 
   hs-source-dirs: src
 

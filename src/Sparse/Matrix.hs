@@ -32,8 +32,8 @@ module Sparse.Matrix
   , Key
   , key, shuffled, unshuffled
   -- * Construction
-  , fromList
-  , singleton
+  , Sparse.Matrix.fromList
+  , Sparse.Matrix.singleton
   , ident
   , empty
   -- * Consumption
@@ -42,7 +42,7 @@ module Sparse.Matrix
   , Eq0(..)
   -- * Customization
   , addWith
-  , multiplyWith, multiplyWithOld, multiplyWithNew
+  , multiplyWith
   , nonZero
   -- * Lenses
   , _Mat, keys, values
@@ -51,36 +51,57 @@ module Sparse.Matrix
 import Control.Applicative hiding (empty)
 import Control.Lens
 import Data.Bits
+import Data.Complex
 import Data.Foldable
 import Data.Function (on)
-import qualified Data.Vector.Algorithms.Intro as Intro
+import qualified Data.Vector as V
+import qualified Data.Vector.Algorithms.Insertion as Sort
 import qualified Data.Vector.Generic as G
 import qualified Data.Vector.Hybrid as H
 import qualified Data.Vector.Hybrid.Internal as H
 import qualified Data.Vector.Unboxed as U
+import Data.Vector.Fusion.Stream (Stream)
 import Data.Word
 import Prelude hiding (head, last)
-import Sparse.Matrix.Fusion
+import Sparse.Matrix.Fusion as Fusion
 import Sparse.Matrix.Key
+import Sparse.Matrix.Heap as Heap
+import Control.DeepSeq
 
 -- import Debug.Trace
 -- import Numeric.Lens
 
 -- * Distinguishable Zero
 
-class Eq0 a where
+class Num a => Eq0 a where
   isZero :: a -> Bool
 #ifndef HLINT
   default isZero :: (Num a, Eq a) => a -> Bool
   isZero = (0 ==)
   {-# INLINE isZero #-}
 #endif
+  add :: G.Vector v a => Mat v a -> Mat v a -> Mat v a
+  add = addWith0 $ nonZero (+)
+  {-# INLINE add #-}
+
+  sub :: G.Vector v a => Mat v a -> Mat v a -> Mat v a
+  sub = addWith0 $ nonZero (-)
+  {-# INLINE sub #-}
+
+  addHeap :: Maybe (Heap a) -> Stream (Key, a)
+  addHeap = Heap.streamHeapWith0 $ nonZero (+)
+
+  subHeap :: Maybe (Heap a) -> Stream (Key, a)
+  subHeap = Heap.streamHeapWith0 $ nonZero (-)
 
 instance Eq0 Int
 instance Eq0 Word
 instance Eq0 Integer
 instance Eq0 Float
 instance Eq0 Double
+instance (RealFloat a, Eq0 a) => Eq0 (Complex a) where
+  isZero (a :+ b) = isZero a && isZero b
+  {-# INLINE isZero #-}
 
 -- * Sparse Matrices
 
@@ -92,6 +113,9 @@ instance (G.Vector v a, Show a) => Show (Mat v a) where
 
 instance (G.Vector v a, Read a) => Read (Mat v a) where
   readsPrec d r = [ (Mat m, t) | (m, t) <- readsPrec d r ]
+
+instance NFData (v a) => NFData (Mat v a) where
+  rnf (Mat (H.V ks vs)) = rnf ks `seq` rnf vs `seq` ()
 
 -- | This isomorphism lets you access the internal structure of a matrix
 _Mat :: Iso (Mat u a) (Mat v b) (H.Vector U.Vector u (Key, a)) (H.Vector U.Vector v (Key, b))
@@ -152,7 +176,7 @@ instance G.Vector v a => At (Mat v a) where
     where l = search (\j -> (ks U.! j) >= i) 0 (U.length ks)
   {-# INLINE at #-}
 
-instance Eq0 (Mat v a) where
+instance (G.Vector v a, Num a, Eq0 a) => Eq0 (Mat v a) where
   isZero = H.null . runMat
   {-# INLINE isZero #-}
 
@@ -160,8 +184,15 @@ instance Eq0 (Mat v a) where
 
 -- | Build a sparse matrix.
 fromList :: G.Vector v a => [(Key, a)] -> Mat v a
-fromList xs = Mat $ H.modify (Intro.sortBy (compare `on` fst)) $ H.fromList xs
-{-# INLINE fromList #-}
+fromList xs = Mat $ H.modify (Sort.sortBy (compare `on` fst)) $ H.fromList xs
+{-
+{-# SPECIALIZE fromList :: [(Key, a)]              -> Mat V.Vector a #-}
+{-# SPECIALIZE fromList :: [(Key, ()) ]            -> Mat U.Vector () #-}
+{-# SPECIALIZE fromList :: [(Key, Int)]            -> Mat U.Vector Int #-}
+{-# SPECIALIZE fromList :: [(Key, Double)]         -> Mat U.Vector Double #-}
+{-# SPECIALIZE fromList :: [(Key, Complex Double)] -> Mat U.Vector (Complex Double) #-}
+-}
+{-# INLINABLE fromList #-}
 
 -- | @singleton@ makes a matrix with a singleton value at a given location
 singleton :: G.Vector v a => Key -> a -> Mat v a
@@ -175,7 +206,7 @@ ident w = Mat $ H.generate (fromIntegral w) $ \i -> let i' = fromIntegral i in (
 
 -- | The empty matrix
 empty :: G.Vector v a => Mat v a
-empty = Mat H.empty
+empty = empty
 {-# INLINE empty #-}
 
 -- * Consumption
@@ -186,23 +217,25 @@ count = H.length . runMat
 {-# INLINE count #-}
 
 instance (G.Vector v a, Num a, Eq0 a) => Num (Mat v a) where
+  {-# SPECIALIZE instance (Num a, Eq0 a) => Num (Mat V.Vector a) #-}
+  {-# SPECIALIZE instance Num (Mat U.Vector Int) #-}
+  {-# SPECIALIZE instance Num (Mat U.Vector Double) #-}
+  {-# SPECIALIZE instance Num (Mat U.Vector (Complex Double)) #-}
   abs    = over each abs
   {-# INLINE abs #-}
   signum = over each signum
   {-# INLINE signum #-}
   negate = over each negate
   {-# INLINE negate #-}
-  fromInteger 0 = Mat H.empty
+  fromInteger 0 = empty
   fromInteger _ = error "Mat: fromInteger n"
   {-# INLINE fromInteger #-}
-  (+) = addWith $ nonZero (+)
+  (+) = add
   {-# INLINE (+) #-}
-  (-) = addWith $ nonZero (-)
+  (-) = sub
   {-# INLINE (-) #-}
-  (*) = multiplyWith (*) $ \ a b -> case a + b of
-      c | isZero c  -> Nothing
-        | otherwise -> Just c
-  {-# INLINE (*) #-}
+  (*) = multiplyWith (*) addHeap
+  {-# INLINEABLE (*) #-}
 
 -- | Remove results that are equal to zero from a simpler function.
 --
@@ -248,12 +281,14 @@ parity k0 = testBit k6 0 where
   k6 = k5 `xor` unsafeShiftR k5 32
 {-# INLINE parity #-}
 
+{-
 -- | @critical m@ assumes @count m >= 2@ and tells you the mask to use for @split@
 critical :: G.Vector v a => Mat v a -> Word64
 critical (Mat (H.V ks _)) = smear (xor lo hi)  where -- `xor` unsafeShiftR bits 1 where -- the bit we're splitting on
   lo = runKey (U.head ks)
   hi = runKey (U.last ks)
 {-# INLINE critical #-}
+-}
 
 -- | partition along the critical bit into a 2-fat component and the remainder.
 --
@@ -270,113 +305,93 @@ split crit (Mat h@(H.V ks _)) = (Mat m0, Mat m1)
 -- | Merge two matrices where the indices coincide into a new matrix. This provides for generalized
 -- addition. Return 'Nothing' for zero.
 --
-addWith :: G.Vector v a => (a -> a -> Maybe a) -> Mat v a -> Mat v a -> Mat v a
+addWith :: G.Vector v a => (a -> a -> a) -> Mat v a -> Mat v a -> Mat v a
 addWith f xs ys = Mat (G.unstream (mergeStreamsWith f (G.stream (runMat xs)) (G.stream (runMat ys))))
 {-# INLINE addWith #-}
 
--- | Multiply two matrices using the specified multiplication and addition operation.
---
--- reference implementation
-multiplyWithOld :: G.Vector v a => (a -> a -> a) -> (a -> a -> Maybe a) -> Mat v a -> Mat v a -> Mat v a
-{-# INLINE multiplyWithOld #-}
-multiplyWithOld times plus x0 y0 = case compare (count x0) 1 of
-  LT -> Mat H.empty
-  EQ -> go1n x0 y0
-  GT -> case compare (count y0) 1 of
-      LT -> Mat H.empty
-      EQ -> gon1 x0 y0
-      GT -> go (critical x0) x0 (critical y0) y0
-  where
-    goL x cy y
-      | count x == 1 = go1n x y
-      | otherwise = go (critical x) x cy y
-    {-# INLINE goL #-}
-    goR cx x y 
-      | count y == 1 = gon1 x y
-      | otherwise = go cx x (critical y) y
-    {-# INLINE goR #-}
-    go cx x cy y -- choose and execute a split
-      | cx >= cy = case split (cx `xor` unsafeShiftR cx 1) x of
-        (m0,m1) | parity cx -> goL m0 cy y `add` goL m1 cy y -- merge left and right traced out regions
-                | otherwise -> goL m0 cy y `fby` goL m1 cy y -- top and bottom
-      | otherwise = case split (cy `xor` unsafeShiftR cy 1) y of
-        (m0,m1) | parity cy -> goR cx x m0 `fby` goR cx x m1 -- left and right
-                | otherwise -> goR cx x m0 `add` goR cx x m1 -- merge top and bottom traced out regions
-    gon1 (Mat x) (Mat y) = Mat $ H.modify (Intro.sortBy (compare `on` fst)) $ G.unstream (timesSingleton times (G.stream x) (H.head y))
-    {-# INLINE gon1 #-}
-    go1n (Mat x) (Mat y) = Mat $ H.modify (Intro.sortBy (compare `on` fst)) $ G.unstream (singletonTimes times (H.head x) (G.stream y))
-    {-# INLINE go1n #-}
-    add = addWith plus
-    {-# INLINE add #-}
-    fby (Mat l) (Mat r) = Mat (l H.++ r)
-    {-# INLINE fby #-}
+addWith0 :: G.Vector v a => (a -> a -> Maybe a) -> Mat v a -> Mat v a -> Mat v a
+addWith0 f xs ys = Mat (G.unstream (mergeStreamsWith0 f (G.stream (runMat xs)) (G.stream (runMat ys))))
+{-# INLINE addWith0 #-}
 
-multiplyWith :: G.Vector v a => (a -> a -> a) -> (a -> a -> Maybe a) -> Mat v a -> Mat v a -> Mat v a
-multiplyWith = multiplyWithNew
-{-# INLINE multiplyWith #-}
+mask1,mask2 :: Word64
+mask1 = 0xAAAAAAAAAAAAAAAA -- i
+mask2 = 0x5555555555555555 -- j
 
 -- | Multiply two matrices using the specified multiplication and addition operation.
-multiplyWithNew :: G.Vector v a => (a -> a -> a) -> (a -> a -> Maybe a) -> Mat v a -> Mat v a -> Mat v a
-{-# INLINE multiplyWithNew #-}
-multiplyWithNew times plus x0 y0 = case compare (count x0) 1 of
-  LT -> Mat H.empty
-  EQ -> go1n (lo x0) (head x0) (lo y0) y0 (hi y0)
+multiplyWith :: G.Vector v a => (a -> a -> a) -> (Maybe (Heap a) -> Stream (Key, a)) -> Mat v a -> Mat v a -> Mat v a
+{-# INLINEABLE multiplyWith #-}
+multiplyWith times make x0 y0 = case compare (count x0) 1 of
+  LT -> empty
+  EQ | count y0 == 1 -> Mat $ G.unstream $ make $ go11 (lo x0) (head x0) (lo y0) (head y0)
+     | otherwise     -> Mat $ G.unstream $ make $ go12 (lo x0) (head x0) (lo y0) y0 (hi y0)
   GT -> case compare (count y0) 1 of
-      LT -> Mat H.empty
-      EQ -> gon1 (lo x0) x0 (hi x0) (lo y0) (head y0)
-      GT -> go   (lo x0) x0 (hi x0) (lo y0) y0 (hi y0)
+      LT -> empty
+      EQ -> Mat $ G.unstream $ make $ go21 (lo x0) x0 (hi x0) (lo y0) (head y0)
+      GT -> Mat $ G.unstream $ make $ go22 (lo x0) x0 (hi x0) (lo y0) y0 (hi y0)
   where
-    goL0 xa x ya y yb
-      | count x == 1 = go1n xa (head x) ya y yb
-      | otherwise    = go xa x (hi x) ya y yb
-    {-# INLINE goL0 #-}
+    go11 xa a yb b
+       | unsafeShiftL (xa .&. mask2) 1 /= (yb .&. mask1) = Nothing
+       | otherwise = Just $ Heap.singleton (Key (xa .&. mask1 .|. yb .&. mask2)) (times a b)
 
-    goL1 x xb ya y yb
-      | count x == 1 = go1n xb (head x) ya y yb
-      | otherwise    = go (lo x) x xb ya y yb
-    {-# INLINE goL1 #-}
+    -- internal cases in go22
+    go22L0 xa x ya y yb
+      | count x == 1 = go12 xa (head x) ya y yb
+      | otherwise    = go22 xa x (hi x) ya y yb
+    {-# INLINE go22L0 #-}
 
-    goR0 xa x xb ya y
-      | count y == 1 = gon1 xa x xb ya (head y)
-      | otherwise    = go xa x xb ya y (hi y)
-    {-# INLINE goR0 #-}
+    go22L1 x xb ya y yb
+      | count x == 1 = go12 xb (head x) ya y yb
+      | otherwise    = go22 (lo x) x xb ya y yb
+    {-# INLINE go22L1 #-}
 
-    goR1 xa x xb y yb
-      | count y == 1 = gon1 xa x xb yb (head y)
-      | otherwise    = go xa x xb (lo y) y yb
-    {-# INLINE goR1 #-}
+    go22R0 xa x xb ya y
+      | count y == 1 = go21 xa x xb ya (head y)
+      | otherwise    = go22 xa x xb ya y (hi y)
+    {-# INLINE go22R0 #-}
+
+    go22R1 xa x xb y yb
+      | count y == 1 = go21 xa x xb yb (head y)
+      | otherwise    = go22 xa x xb (lo y) y yb
+    {-# INLINE go22R1 #-}
 
     -- x and y have at lo 2 non-zero elements each
-    go xa x xb ya y yb
-      | cm <- complement evenMask
-      , unsafeShiftL (cm .&. 0x5555555555555555 .&. xa) 1 /= cm .&. 0xAAAAAAAAAAAAAAAA .&. yb = Mat H.empty -- we disagree on the joining index, so short circuit
+    go22 xa x xb ya y yb
+      | cm <- complement quadrantMask
+      , unsafeShiftL (cm .&. mask2 .&. xa) 1 /= cm .&. mask1 .&. yb = Nothing  -- we disagree on the joining index, so short circuit
       | mx .&. crit /= 0 = case split crit x of -- then this is the most significant difference
-        (m0,m1) | oddity      -> goL0 xa m0 ya y yb `add` goL1 m1 xb ya y yb -- we split on j so we have to merge
-                | otherwise   -> goL0 xa m0 ya y yb `fby` goL1 m1 xb ya y yb -- we split on i so we can concatenate
+        (m0,m1) | oddity      -> go22L0 xa m0 ya y yb `madd` go22L1 m1 xb ya y yb -- we split on j so we have to merge
+                | otherwise   -> go22L0 xa m0 ya y yb `mfby` go22L1 m1 xb ya y yb -- we split on i so we can concatenate
       | otherwise = case split crit y of        -- then this is the most significant
-        (m0,m1) | oddity      -> goR0 xa x xb ya m0 `fby` goR1 xa x xb m1 yb -- we split on k so we can concatenate
-                | otherwise   -> goR0 xa x xb ya m0 `add` goR1 xa x xb m1 yb -- we split on j so we have to merge
+        (m0,m1) | oddity      -> go22R0 xa x xb ya m0 `mfby` go22R1 xa x xb m1 yb -- we split on k so we can concatenate
+                | otherwise   -> go22R0 xa x xb ya m0 `madd` go22R1 xa x xb m1 yb -- we split on j so we have to merge
       where
         mx     = xor xa xb
         mask   = smear (mx .|. xor ya yb)
         oddity = parity mask
-        evenMask
+        quadrantMask -- promote mask to an integral number of quadrants / even number of bits
           | oddity = unsafeShiftL mask 1 .|. 1
           | otherwise   = mask
         crit = mask `xor` unsafeShiftR mask 1
 
-    gon1 _ (Mat x) _ yb b = Mat $ H.modify (Intro.sortBy (compare `on` fst)) $ G.unstream (timesSingleton times (G.stream x) (Key yb, b))
-    {-# INLINE gon1 #-}
-    go1n xa a _ (Mat y) _ = Mat $ H.modify (Intro.sortBy (compare `on` fst)) $ G.unstream (singletonTimes times (Key xa, a) (G.stream y))
-    {-# INLINE go1n #-}
-    add = addWith plus
-    {-# INLINE add #-}
-    fby (Mat l) (Mat r) = Mat (l H.++ r)
-    {-# INLINE fby #-}
+    go21 _ (Mat x) _ yb b = Heap.timesSingleton times (G.stream x) (Key yb) b -- linear scan. use tree and fast rejects?
+    go12 xa a _ (Mat y) _ = Heap.singletonTimes times (Key xa) a (G.stream y)
+
+    madd Nothing xs = xs
+    madd xs Nothing = xs
+    madd (Just x) (Just y) = Just (mix x y)
+    {-# INLINE madd #-}
+
+    mfby Nothing xs = xs
+    mfby xs Nothing = xs
+    mfby (Just x) (Just y) = Just (fby x y)
+    {-# INLINE mfby #-}
+
     lo (Mat (H.V k _)) = runKey (U.head k)
     {-# INLINE lo #-}
+
     hi (Mat (H.V k _)) = runKey (U.last k)
     {-# INLINE hi #-}
+
     head :: G.Vector v a => Mat v a -> a
     head (Mat (H.V _ v)) = G.head v
     {-# INLINE head #-}
