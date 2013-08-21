@@ -165,7 +165,6 @@ instance Eq0 (Mat v a) where
 -- | Build a sparse matrix.
 fromList :: G.Vector v a => [(Key, a)] -> Mat v a
 fromList xs = Mat $ H.modify (Intro.sortBy (compare `on` fst)) $ H.fromList xs
-{-# INLINE fromList #-}
 
 -- | @singleton@ makes a matrix with a singleton value at a given location
 singleton :: G.Vector v a => Key -> a -> Mat v a
@@ -370,9 +369,7 @@ multiplyWithNew times plus x0 y0 = case compare (count x0) 1 of
         crit = mask `xor` unsafeShiftR mask 1
 
     gon1 _ (Mat x) _ yb b = Mat $ H.modify (Intro.sortBy (compare `on` fst)) $ G.unstream (timesSingleton times (G.stream x) (Key yb, b))
-    {-# INLINE gon1 #-}
     go1n xa a _ (Mat y) _ = Mat $ H.modify (Intro.sortBy (compare `on` fst)) $ G.unstream (singletonTimes times (Key xa, a) (G.stream y))
-    {-# INLINE go1n #-}
     add = addWith plus
     {-# INLINE add #-}
     fby (Mat l) (Mat r) = Mat (l H.++ r)
