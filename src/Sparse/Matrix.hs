@@ -62,11 +62,15 @@ import Data.Word
 import Prelude hiding (head, last)
 import Sparse.Matrix.Fusion
 import Sparse.Matrix.Key
+import Control.DeepSeq
 
 -- import Debug.Trace
 -- import Numeric.Lens
 
 -- * Distinguishable Zero
+
+instance NFData (v a) => NFData (Mat v a) where
+  rnf (Mat (H.V ks vs)) = rnf ks `seq` rnf vs `seq` ()
 
 class Eq0 a where
   isZero :: a -> Bool
