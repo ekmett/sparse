@@ -60,7 +60,8 @@ import qualified Data.Vector.Generic as G
 import qualified Data.Vector.Hybrid as H
 import qualified Data.Vector.Hybrid.Internal as H
 import qualified Data.Vector.Unboxed as U
-import Data.Vector.Fusion.Stream (Stream)
+import Data.Vector.Fusion.Stream (Stream, sized)
+import Data.Vector.Fusion.Stream.Size
 import Data.Word
 import Prelude hiding (head, last)
 import Sparse.Matrix.Fusion as Fusion
@@ -185,13 +186,6 @@ instance (G.Vector v a, Num a, Eq0 a) => Eq0 (Mat v a) where
 -- | Build a sparse matrix.
 fromList :: G.Vector v a => [(Key, a)] -> Mat v a
 fromList xs = Mat $ H.modify (Sort.sortBy (compare `on` fst)) $ H.fromList xs
-{-
-{-# SPECIALIZE fromList :: [(Key, a)]              -> Mat V.Vector a #-}
-{-# SPECIALIZE fromList :: [(Key, ()) ]            -> Mat U.Vector () #-}
-{-# SPECIALIZE fromList :: [(Key, Int)]            -> Mat U.Vector Int #-}
-{-# SPECIALIZE fromList :: [(Key, Double)]         -> Mat U.Vector Double #-}
-{-# SPECIALIZE fromList :: [(Key, Complex Double)] -> Mat U.Vector (Complex Double) #-}
--}
 {-# INLINABLE fromList #-}
 
 -- | @singleton@ makes a matrix with a singleton value at a given location
@@ -281,15 +275,6 @@ parity k0 = testBit k6 0 where
   k6 = k5 `xor` unsafeShiftR k5 32
 {-# INLINE parity #-}
 
-{-
--- | @critical m@ assumes @count m >= 2@ and tells you the mask to use for @split@
-critical :: G.Vector v a => Mat v a -> Word64
-critical (Mat (H.V ks _)) = smear (xor lo hi)  where -- `xor` unsafeShiftR bits 1 where -- the bit we're splitting on
-  lo = runKey (U.head ks)
-  hi = runKey (U.last ks)
-{-# INLINE critical #-}
--}
-
 -- | partition along the critical bit into a 2-fat component and the remainder.
 --
 -- Note: the keys have 'junk' on the top of the keys, but it should be exactly the junk we need them to have when we rejoin the quadrants
@@ -322,13 +307,14 @@ multiplyWith :: G.Vector v a => (a -> a -> a) -> (Maybe (Heap a) -> Stream (Key,
 {-# INLINEABLE multiplyWith #-}
 multiplyWith times make x0 y0 = case compare (count x0) 1 of
   LT -> empty
-  EQ | count y0 == 1 -> Mat $ G.unstream $ make $ go11 (lo x0) (head x0) (lo y0) (head y0)
-     | otherwise     -> Mat $ G.unstream $ make $ go12 (lo x0) (head x0) (lo y0) y0 (hi y0)
+  EQ | count y0 == 1 -> Mat $ G.unstream $ hint $ make $ go11 (lo x0) (head x0) (lo y0) (head y0)
+     | otherwise     -> Mat $ G.unstream $ hint $ make $ go12 (lo x0) (head x0) (lo y0) y0 (hi y0)
   GT -> case compare (count y0) 1 of
       LT -> empty
-      EQ -> Mat $ G.unstream $ make $ go21 (lo x0) x0 (hi x0) (lo y0) (head y0)
-      GT -> Mat $ G.unstream $ make $ go22 (lo x0) x0 (hi x0) (lo y0) y0 (hi y0)
+      EQ -> Mat $ G.unstream $ hint $ make $ go21 (lo x0) x0 (hi x0) (lo y0) (head y0)
+      GT -> Mat $ G.unstream $ hint $ make $ go22 (lo x0) x0 (hi x0) (lo y0) y0 (hi y0)
   where
+    hint x = sized x $ Max (count x0 * count y0)
     go11 xa a yb b
        | unsafeShiftL (xa .&. mask2) 1 /= (yb .&. mask1) = Nothing
        | otherwise = Just $ Heap.singleton (Key (xa .&. mask1 .|. yb .&. mask2)) (times a b)
