@@ -28,40 +28,28 @@ import Data.Vector.Fusion.Util
 import Data.Word
 import Sparse.Matrix.Key
 
--- Bootstrapped _catenable_ non-empty pairing heaps
+-- | Bootstrapped _catenable_ non-empty pairing heaps
 data Heap a = Heap {-# UNPACK #-} !Key a [Heap a] [Heap a] [Heap a]
   deriving (Show,Read)
 
--- append two heaps where we know every key in the first occurs before every key in the second
+-- | Append two heaps where we know every key in the first occurs before every key in the second
 fby :: Heap a -> Heap a -> Heap a
 fby (Heap i a as ls rs) r = Heap i a as ls (r:rs)
 
-fbys :: Heap a -> [Heap a] -> [Heap a] -> Heap a
-fbys (Heap i a as [] []) ls' rs' = Heap i a as ls' rs'
-fbys (Heap i a as ls []) ls' rs' = Heap i a as ls $ rs' <> reverse ls'
-fbys (Heap i a as ls rs) ls' rs' = Heap i a as ls $ rs' <> reverse ls' <> rs
 
--- | interleave two heaps making a new 'Heap'
+-- | Interleave two heaps making a new 'Heap'
 mix :: Heap a -> Heap a -> Heap a
-mix x0@(Heap i0 _ _ _ _) y0@(Heap j0 _ _ _ _)
-  | i0 <= j0  = go x0 y0
-  | otherwise = go y0 x0
-  where
-    go (Heap i a as [] []) x = Heap i a (x:as) [] [] -- flat
-    go (Heap i a as al ar) x = case pop as al ar of  -- nest
-      Nothing -> Heap i a [x] [] [] -- possible?
-      Just y  -> Heap i a [x,y] [] []
+mix x@(Heap i a as al ar) y@(Heap j b bs bl br)
+  | i <= j    = Heap i a (y:pops as al ar) [] []
+  | otherwise = Heap j b (x:pops bs bl br) [] []
 
 top :: Heap a -> (Key, a)
 top (Heap i a _ _ _) = (i, a)
 
 -- violates the Stream fusion guidelines
 pop :: [Heap a] -> [Heap a] -> [Heap a] -> Maybe (Heap a)
-pop (x:xs) ls     rs = Just (fbys (meld x xs) ls rs)
-  where
-    meld u []     = u
-    meld u (s:ss) = meld (mix u s) ss
-pop []     (l:ls) rs = Just (fbys l ls rs)
+pop (x:xs) ls     rs = Just $ fbys (meld x xs) ls rs
+pop []     (l:ls) rs = Just $ fbys l ls rs
 pop []     []     rs = case reverse rs of
   f:fs -> Just (fbys f fs [])
   []   -> Nothing
@@ -76,6 +64,28 @@ fromList [] = error "empty Heap"
 fromAscList :: [(Key,a)] -> Heap a
 fromAscList ((k0,v0):xs) = Prelude.foldr (\(k,v) r -> fby (singleton k v) r) (singleton k0 v0) xs
 fromAscList [] = error "empty Heap"
+
+-- * Internals
+
+fbys :: Heap a -> [Heap a] -> [Heap a] -> Heap a
+fbys (Heap i a as [] []) ls' rs' = Heap i a as ls' rs'
+fbys (Heap i a as ls []) ls' rs' = Heap i a as ls $ rs' <> reverse ls'
+fbys (Heap i a as ls rs) ls' rs' = Heap i a as ls $ rs' <> reverse ls' <> rs
+
+pops :: [Heap a] -> [Heap a] -> [Heap a] -> [Heap a]
+pops xs     []     [] = xs
+pops (x:xs) ls     rs = [fbys (meld x xs) ls rs]
+pops []     (l:ls) rs = [fbys l ls rs]
+pops []     []     rs = case reverse rs of
+  f:fs -> [fbys f fs []]
+  _    -> [] -- caught above by the 'go as [] []' case
+
+-- meld a list of heaps into a heap
+meld :: Heap a -> [Heap a] -> Heap a
+meld u []     = u
+meld u (s:ss) = meld (mix u s) ss
+
+-- * Instances
 
 instance Functor Heap where
   fmap f (Heap k a xs ls rs) = Heap k (f a) (fmap f <$> xs) (fmap f <$> ls) (fmap f <$> rs)
