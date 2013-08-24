@@ -1,6 +1,6 @@
 name:          sparse
 category:      Data, Vector
-version:       0.1
+version:       0.6
 license:       BSD3
 cabal-version: >= 1.8
 license-file:  LICENSE
