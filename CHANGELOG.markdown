@@ -1,3 +1,7 @@
+0.7.0.1
+-------
+* Consolidated the tutorial under on "slug" on the FP Complete site, this broke all of the URLs in the 0.7 documentation.
+
 0.7
 ---
 * Switched to using an internal vector type that unboxes as much as it can. This lets type inference work much better when playing around at the ghci REPL.

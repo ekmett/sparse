@@ -26,7 +26,7 @@
 --
 -- How to perform the comparison without interleaving is described in
 --
--- <https://www.fpcomplete.com/user/edwardk/revisiting-matrix-multiplication-part-2>
+-- <https://www.fpcomplete.com/user/edwardk/revisiting-matrix-multiplication/part-2>
 --
 ----------------------------------------------------------------------------
 module Sparse.Matrix.Internal.Key

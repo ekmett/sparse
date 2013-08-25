@@ -13,7 +13,7 @@
 --
 -- Bootstrapped catenable non-empty pairing heaps as described in
 --
--- <https://www.fpcomplete.com/user/edwardk/revisiting-matrix-multiplication-part-5>
+-- <https://www.fpcomplete.com/user/edwardk/revisiting-matrix-multiplication/part-5>
 -----------------------------------------------------------------------------
 module Sparse.Matrix.Internal.Heap
   ( Heap(..)
