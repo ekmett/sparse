@@ -75,6 +75,28 @@ library
   if impl(ghc<6.13)
     Ghc-Options: -finline-if-enough-args -fno-method-sharing
 
+test-suite properties
+  type: exitcode-stdio-1.0
+  main-is: properties.hs
+  hs-source-dirs: tests
+  ghc-options: -w -threaded -rtsopts -with-rtsopts=-N -fsimpl-tick-factor=400
+  if !flag(test-properties)
+    buildable: False
+  else
+    build-depends:
+      base,
+      containers,
+      hybrid-vectors,
+      lens,
+      linear                     >= 1.2 && < 2,
+      QuickCheck                 >= 2.5,
+      sparse,
+      test-framework             >= 0.6,
+      test-framework-quickcheck2 >= 0.3,
+      test-framework-th          >= 0.2,
+      transformers,
+      vector
+
 -- Verify the results of the examples
 test-suite doctests
   type:           exitcode-stdio-1.0
@@ -99,28 +121,6 @@ test-suite doctests
 
   if impl(ghc<7.6.1)
     ghc-options: -Werror
-
-test-suite properties
-  type: exitcode-stdio-1.0
-  main-is: properties.hs
-  hs-source-dirs: tests
-  ghc-options: -w -threaded -rtsopts -with-rtsopts=-N -fsimpl-tick-factor=400
-  if !flag(test-properties)
-    buildable: False
-  else
-    build-depends:
-      base,
-      containers,
-      hybrid-vectors,
-      lens,
-      linear                     >= 1.2 && < 2,
-      QuickCheck                 >= 2.5,
-      sparse,
-      test-framework             >= 0.6,
-      test-framework-quickcheck2 >= 0.3,
-      test-framework-th          >= 0.2,
-      transformers,
-      vector
 
 -- matrix-matrix multiplication
 benchmark mm
