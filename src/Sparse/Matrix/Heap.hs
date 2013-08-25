@@ -148,46 +148,36 @@ streamHeapWith0 f h0 = Stream step (maybe Finished Start h0) Unknown where
   {-# INLINE [1] step #-}
 {-# INLINE [0] streamHeapWith0 #-}
 
-m1, m2 :: Word64
-m1 = 0xAAAAAAAAAAAAAAAA
-m2 = 0x5555555555555555
-{-# INLINE m1 #-}
-{-# INLINE m2 #-}
-
 -- | This is the internal stream fusion combinator used to multiply on the right by a singleton key
 timesSingleton :: (a -> b -> c) -> Stream Id (Key, a) -> Key -> b -> Maybe (Heap c)
-timesSingleton f (Stream stepa sa0 _) (Key jk) b = start sa0 where
-  !jj = unsafeShiftR (jk .&. m1) 1
-  !kk = jk .&. m2
+timesSingleton f (Stream stepa sa0 _) (Key j k) b = start sa0 where
   start sa = case unId (stepa sa) of
-    Yield (Key ij, a) sa'
-      | ij .&. m2 == jj -> Just $ run (singleton (Key (ij .&. m1 .|. kk)) (f a b)) sa'
+    Yield (Key i j', a) sa'
+      | j == j'         -> Just $ run (singleton (Key i k) (f a b)) sa'
       | otherwise       -> start sa'
     Skip sa' -> start sa'
     Done     -> Nothing
   run h sa = case unId (stepa sa) of
-    Yield (Key ij, a) sa'
-      | ij .&. m2 == jj -> run (h `mix` singleton (Key (ij .&. m1 .|. kk)) (f a b)) sa'
-      | otherwise       -> run h sa'
+    Yield (Key i j', a) sa'
+      | j == j'   -> run (h `mix` singleton (Key i k) (f a b)) sa'
+      | otherwise -> run h sa'
     Skip sa' -> run h sa'
     Done     -> h
 {-# INLINE timesSingleton #-}
 
 -- | This is the internal stream fusion combinator used to multiply on the right by a singleton key
 singletonTimes :: (a -> b -> c) -> Key -> a -> Stream Id (Key, b) -> Maybe (Heap c)
-singletonTimes f (Key ij) a (Stream stepb sb0 _) = start sb0 where
-  !jj = unsafeShiftL (ij .&. m2) 1
-  !ii = ij .&. m1
+singletonTimes f (Key i j) a (Stream stepb sb0 _) = start sb0 where
   start sb = case unId (stepb sb) of
-    Yield (Key jk, b) sb'
-      | jk .&. m1 == jj -> Just $ run (singleton (Key (ii .|. jk .&. m2)) (f a b)) sb'
-      | otherwise       -> start sb'
+    Yield (Key j' k, b) sb'
+      | j == j'   -> Just $ run (singleton (Key i k) (f a b)) sb'
+      | otherwise -> start sb'
     Skip sb' -> start sb'
     Done     -> Nothing
   run h sb = case unId (stepb sb) of
-    Yield (Key jk, b) sb'
-      | jk .&. m1 == jj -> run (h `mix` singleton (Key (ii .|. jk .&. m2)) (f a b)) sb'
-      | otherwise       -> run h sb'
+    Yield (Key j' k, b) sb'
+      | j == j'   -> run (h `mix` singleton (Key i k) (f a b)) sb'
+      | otherwise -> run h sb'
     Skip sb' -> run h sb'
     Done     -> h
 {-# INLINE singletonTimes #-}
