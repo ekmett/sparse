@@ -23,6 +23,9 @@
 --
 -- Sparse Matrices in Morton order
 --
+-- The design of this library is described in the series \"Revisiting Matrix Multiplication\" on FP Complete's School of Haskell.
+--
+-- <https://www.fpcomplete.com/user/edwardk/revisiting-matrix-multiplication/>
 ----------------------------------------------------------------------------
 
 module Sparse.Matrix
