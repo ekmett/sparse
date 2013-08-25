@@ -109,6 +109,15 @@ instance G.Vector U.Vector Key where
                         $ G.elemseq (undefined :: U.Vector Word) y z
 
 -- | compare the position of the most significant bit of two words
+--
+-- >>> compares 4 7
+-- EQ
+--
+-- >>> compares 7 9
+-- LT
+--
+-- >>> compares 9 7
+-- GT
 compares :: Word -> Word -> Ordering
 compares a b = case compare a b of
   LT | a < xor a b -> LT
@@ -116,26 +125,107 @@ compares a b = case compare a b of
   _ -> EQ
 {-# INLINE compares #-}
 
+-- | @'lts' a b@ returns 'True' when the position of the most significant bit of @a@ is less than the position of the most signficant bit of @b@.
+--
+-- >>> lts 4 10
+-- True
+--
+-- >>> lts 4 7
+-- False
+--
+-- >>> lts 7 8
+-- True
 lts :: Word -> Word -> Bool
 lts a b = a < b && a < xor a b
 {-# INLINE lts #-}
 
+-- | @'les' a b@ returns 'True' when the position of the most significant bit of @a@ is less than or equal to the position of the most signficant bit of @b@.
+--
+-- >>> les 4 10
+-- True
+--
+-- >>> les 4 7
+-- True
+--
+-- >>> les 7 4
+-- True
+--
+-- >>> les 10 4
+-- False
 les :: Word -> Word -> Bool
 les a b = a <= b || xor a b <= b
 {-# INLINE les #-}
 
+-- | @'eqs' a b@ returns 'True' when the position of the most significant bit of @a@ is equal to the position of the most signficant bit of @b@.
+--
+-- >>> eqs 4 7
+-- True
+--
+-- >>> eqs 4 8
+-- False
+--
+-- >>> eqs 7 4
+-- True
+--
+-- >>> eqs 8 4
+-- False
 eqs :: Word -> Word -> Bool
-eqs a b = compares a b == EQ
+eqs a b = case compare a b of
+  LT -> a >= xor a b
+  GT -> b >= xor a b
+  EQ -> True
 {-# INLINE eqs #-}
 
+-- | @'nes' a b@ returns 'True' when the position of the most significant bit of @a@ is not equal to the position of the most signficant bit of @b@.
+--
+-- >>> nes 4 7
+-- False
+--
+-- >>> nes 4 8
+-- True
+--
+-- >>> nes 7 4
+-- False
+--
+-- >>> nes 8 4
+-- True
 nes :: Word -> Word -> Bool
-nes a b = compares a b /= EQ
+nes a b = case compare a b of
+  LT -> a < xor a b
+  GT -> b < xor a b
+  EQ -> False
 {-# INLINE nes #-}
 
+-- | @'gts' a b@ returns 'True' when the position of the most significant bit of @a@ is greater than to the position of the most signficant bit of @b@.
+--
+-- >>> gts 4 10
+-- False
+--
+-- >>> gts 4 7
+-- False
+--
+-- >>> gts 7 4
+-- False
+--
+-- >>> gts 10 4
+-- True
 gts :: Word -> Word -> Bool
 gts a b = a > b && xor a b > b
 {-# INLINE gts #-}
 
+-- | @'gts' a b@ returns 'True' when the position of the most significant bit of @a@ is greater than or equal to the position of the most signficant bit of @b@.
+--
+-- >>> ges 4 10
+-- False
+--
+-- >>> ges 4 7
+-- True
+--
+-- >>> ges 7 4
+-- True
+--
+-- >>> ges 10 4
+-- True
 ges :: Word -> Word -> Bool
 ges a b = a >= b || a >= xor a b
 {-# INLINE ges #-}
