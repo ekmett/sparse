@@ -45,21 +45,33 @@ data Heap a = Heap {-# UNPACK #-} !Key a [Heap a] [Heap a] [Heap a]
   deriving (Show,Read)
 
 -- | Append two heaps where we know every key in the first occurs before every key in the second
+--
+-- >>> head $ singleton (Key 1 1) 1 `fby` singleton (Key 2 2) 2
+-- (Key 1 1,1)
 fby :: Heap a -> Heap a -> Heap a
 fby (Heap i a as ls rs) r = Heap i a as ls (r:rs)
 
 -- | Interleave two heaps making a new 'Heap'
+--
+-- >>> head $ singleton (Key 1 1) 1 `mix` singleton (Key 2 2) 2
+-- (Key 1 1,1)
 mix :: Heap a -> Heap a -> Heap a
 mix x@(Heap i a as al ar) y@(Heap j b bs bl br)
   | i <= j    = Heap i a (y:pops as al ar) [] []
   | otherwise = Heap j b (x:pops bs bl br) [] []
 
+-- >>> head $ singleton (Key 1 1) 1
+-- (Key 1 1,1)
 head :: Heap a -> (Key, a)
 head (Heap i a _ _ _) = (i, a)
 
+-- >>> tail $ singleton (Key 1 1) 1
+-- Nothing
 tail :: Heap a -> Maybe (Heap a)
 tail (Heap _ _ xs fs rs) = pop xs fs rs
 
+-- >>> singleton (Key 1 1) 1
+-- Heap (Key 1 1) 1 [] [] []
 singleton :: Key -> a -> Heap a
 singleton k v = Heap k v [] [] []
 
