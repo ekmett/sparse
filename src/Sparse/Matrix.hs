@@ -107,13 +107,13 @@ class Num a => Eq0 a where
   -- cannot yield zero, then you can use
   --
   -- @
-  -- addHeap = Heap.streamHeapWith (+)
+  -- 'addHeap' = 'Heap.streamHeapWith' ('+')
   -- @
   --
-  -- instead of the default definition
+  -- instead of the default definition:
   --
   -- @
-  -- addHeap = Heap.streamHeapWith0 $ nonZero (+)
+  -- 'addHeap' = 'Heap.streamHeapWith0' '$' 'nonZero' ('+')
   -- @
   addHeap :: Maybe (Heap a) -> Stream (Key, a)
   addHeap = Heap.streamHeapWith0 $ nonZero (+)
