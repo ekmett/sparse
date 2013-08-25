@@ -60,25 +60,30 @@ mix x@(Heap i a as al ar) y@(Heap j b bs bl br)
   | i <= j    = Heap i a (y:pops as al ar) [] []
   | otherwise = Heap j b (x:pops bs bl br) [] []
 
+-- |
 -- >>> head $ singleton (Key 1 1) 1
 -- (Key 1 1,1)
 head :: Heap a -> (Key, a)
 head (Heap i a _ _ _) = (i, a)
 
+-- |
 -- >>> tail $ singleton (Key 1 1) 1
 -- Nothing
 tail :: Heap a -> Maybe (Heap a)
 tail (Heap _ _ xs fs rs) = pop xs fs rs
 
+-- |
 -- >>> singleton (Key 1 1) 1
 -- Heap (Key 1 1) 1 [] [] []
 singleton :: Key -> a -> Heap a
 singleton k v = Heap k v [] [] []
 
+-- | Build a 'Heap' from a jumbled up list of elements.
 fromList :: [(Key,a)] -> Heap a
 fromList ((k0,v0):xs) = Prelude.foldr (\(k,v) r -> mix (singleton k v) r) (singleton k0 v0) xs
 fromList [] = error "empty Heap"
 
+-- | Build a 'Heap' from an list of elements that must be in strictly ascending Morton order.
 fromAscList :: [(Key,a)] -> Heap a
 fromAscList ((k0,v0):xs) = Prelude.foldr (\(k,v) r -> fby (singleton k v) r) (singleton k0 v0) xs
 fromAscList [] = error "empty Heap"
@@ -92,23 +97,18 @@ fbys (Heap i a as ls rs) ls' rs' = Heap i a as ls $ rs' <> reverse ls' <> rs
 
 pops :: [Heap a] -> [Heap a] -> [Heap a] -> [Heap a]
 pops xs     []     [] = xs
-pops (x:xs) ls     rs = [fbys (meld x xs) ls rs]
+pops (x:xs) ls     rs = [fbys (Prelude.foldl mix x xs) ls rs]
 pops []     (l:ls) rs = [fbys l ls rs]
 pops []     []     rs = case reverse rs of
   f:fs -> [fbys f fs []]
   _    -> [] -- caught above by the 'go as [] []' case
 
 pop :: [Heap a] -> [Heap a] -> [Heap a] -> Maybe (Heap a)
-pop (x:xs) ls     rs = Just $ fbys (meld x xs) ls rs
+pop (x:xs) ls     rs = Just $ fbys (Prelude.foldl mix x xs) ls rs
 pop []     (l:ls) rs = Just $ fbys l ls rs
 pop []     []     rs = case reverse rs of
   f:fs -> Just (fbys f fs [])
   []   -> Nothing
-
--- meld a list of heaps into a heap
-meld :: Heap a -> [Heap a] -> Heap a
-meld u []     = u
-meld u (s:ss) = meld (mix u s) ss
 
 -- * Instances
 
