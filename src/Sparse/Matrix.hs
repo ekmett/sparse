@@ -33,6 +33,7 @@ module Sparse.Matrix
   -- * Construction
   , Sparse.Matrix.fromList
   , Sparse.Matrix.singleton
+  , transpose
   , ident
   , empty
   -- * Consumption
@@ -48,6 +49,7 @@ module Sparse.Matrix
   ) where
 
 import Control.Applicative hiding (empty)
+import Control.Arrow
 import Control.Lens
 import Data.Bits
 import Data.Complex
@@ -172,6 +174,11 @@ instance (G.Vector v a, Num a, Eq0 a) => Eq0 (Mat v a) where
 fromList :: G.Vector v a => [(Key, a)] -> Mat v a
 fromList xs = _Mat # H.modify (Sort.sortBy (compare `on` fst)) (H.fromList xs)
 {-# INLINABLE fromList #-}
+
+-- | Transpose a matrix
+transpose :: G.Vector v a => Mat v a -> Mat v a
+transpose xs = xs & _Mat %~ H.modify (Sort.sortBy (compare `on` fst)) . H.map (first swap)
+{-# INLINE transpose #-}
 
 -- | @singleton@ makes a matrix with a singleton value at a given location
 singleton :: G.Vector v a => Key -> a -> Mat v a
