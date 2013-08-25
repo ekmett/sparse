@@ -162,22 +162,6 @@ instance (Applicative f, G.Vector v a) => Ixed f (Mat v a) where
     where l = search (\k -> Key (xs U.! k) (ys U.! k) >= ij) 0 n
   {-# INLINE ix #-}
 
-{-
-instance G.Vector v a => At (Mat v a) where
-  at i f (Mat kvs@(H.V ks vs)) = case ks U.!? l of
-    Just j
-      | i == j -> indexed f i (Just (vs G.! l)) <&> \mv -> case mv of
-        Just v  -> Mat $ H.V ks (vs G.// [(l,v)])
-        Nothing  -> case H.splitAt l kvs of
-          (x,y) -> Mat (x H.++ H.tail y)
-    _ -> indexed f i Nothing <&> \mv -> case mv of
-        Just v -> case H.splitAt l kvs of -- TODO: insert v
-          (x,y) -> Mat (x H.++ H.cons (i,v) y)
-        Nothing -> Mat kvs
-    where l = search (\j -> (ks U.! j) >= i) 0 (U.length ks)
-  {-# INLINE at #-}
--}
-
 instance (G.Vector v a, Num a, Eq0 a) => Eq0 (Mat v a) where
   isZero (Mat n _ _ _) = n == 0
   {-# INLINE isZero #-}
