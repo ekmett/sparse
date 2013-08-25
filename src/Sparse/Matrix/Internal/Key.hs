@@ -30,9 +30,14 @@
 --
 ----------------------------------------------------------------------------
 module Sparse.Matrix.Internal.Key
-  ( Key(..)
+  (
+  -- * Keys in Morton order
+    Key(..)
+  , swap
+  -- * Most significant bit comparisons
   , compares
   , lts, les, eqs, nes, ges, gts
+  -- * Unboxed vector constructors
   , U.MVector(..)
   , U.Vector(..)
   ) where
@@ -116,6 +121,14 @@ instance G.Vector U.Vector Key where
   basicUnsafeCopy (MV_Key _ mu mv) (V_Key _ u v) = G.basicUnsafeCopy mu u >> G.basicUnsafeCopy mv v
   elemseq _ (Key x y) z = G.elemseq (undefined :: U.Vector Word) x
                         $ G.elemseq (undefined :: U.Vector Word) y z
+
+-- | Swaps the key components around
+--
+-- >>> Key 100 200
+-- Key 200 100
+swap :: Key -> Key
+swap (Key i j) = Key i j
+{-# INLINE swap #-}
 
 -- | compare the position of the most significant bit of two words
 --
