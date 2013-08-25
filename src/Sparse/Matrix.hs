@@ -29,7 +29,7 @@ module Sparse.Matrix
   -- * Sparse Matrices
     Mat(..)
   -- * Keys
-  , Key
+  , Key(..)
   -- * Construction
   , Sparse.Matrix.fromList
   , Sparse.Matrix.singleton

@@ -32,27 +32,16 @@ sane :: Linear Int -> Linear Int
 sane = M.filter (not . M.null)
 
 toLinear :: Mat U.Vector Int -> Linear Int
-toLinear = sane . H.foldr (\(k,v) r -> r & at (k^._1) . nonEmpty . at (k^._2) ?~ v) M.empty . runMat
+toLinear = sane . H.foldr (\(k,v) r -> r & at (k^._1) . nonEmpty . at (k^._2) ?~ v) M.empty . view _Mat
 
 fromLinear :: Linear Int -> Mat U.Vector Int
 fromLinear m = SM.fromList $ do
   (i, n) <- M.toList m
   (j, a) <- M.toList n
-  return (key i j, a)
+  return (Key i j, a)
 
 prop_to_from x = toLinear (fromLinear x) == sane x
 prop_from_to x = fromLinear (toLinear x) == x
-
-prop_old :: Mat U.Vector Int -> Mat U.Vector Int -> Gen Prop
-prop_old x y | z <- multiplyWithOld (*) (nonZero (+)) x y, z' <- fromLinear (toLinear x !*! toLinear y)
-  = label (show z Prelude.++ " == " Prelude.++ show z') (z == z')
-
-prop_new :: Mat U.Vector Int -> Mat U.Vector Int -> Gen Prop
-prop_new x y | z <- multiplyWithNew (*) (nonZero (+)) x y, z' <- fromLinear (toLinear x !*! toLinear y)
-  = label (show z Prelude.++ " == " Prelude.++ show z') (z == z')
-
-prop_regress :: Mat U.Vector Int -> Mat U.Vector Int -> Bool
-prop_regress x y = multiplyWithNew (*) (nonZero (+)) x y == multiplyWithOld (*) (nonZero (+)) x y
 
 prop_model :: Mat U.Vector Int -> Mat U.Vector Int -> Gen Prop
 prop_model x y | z <- x * y, z' <- fromLinear (toLinear x !*! toLinear y)

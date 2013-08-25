@@ -10,7 +10,7 @@ import Sparse.Matrix as S
 import Test.QuickCheck.Arbitrary
 
 instance Arbitrary Key where
-  arbitrary = key <$> arbitrary <*> arbitrary
+  arbitrary = Key <$> arbitrary <*> arbitrary
 
 instance (G.Vector v a, Arbitrary a) => Arbitrary (Mat v a) where
   arbitrary = S.fromList . M.toList <$> arbitrary
