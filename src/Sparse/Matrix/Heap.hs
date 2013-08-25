@@ -19,13 +19,11 @@ module Sparse.Matrix.Heap
 
 import Control.Applicative
 import Control.Lens
-import Data.Bits
 import Data.Foldable
 import Data.Monoid
 import Data.Vector.Fusion.Stream.Monadic hiding (singleton, fromList)
 import Data.Vector.Fusion.Stream.Size
 import Data.Vector.Fusion.Util
-import Data.Word
 import Sparse.Matrix.Key
 
 -- | Bootstrapped _catenable_ non-empty pairing heaps
