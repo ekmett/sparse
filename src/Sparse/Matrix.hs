@@ -11,6 +11,7 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE StandaloneDeriving #-}
 
 -----------------------------------------------------------------------------
 -- |
@@ -44,6 +45,8 @@ module Sparse.Matrix
   -- * Customization
   , addWith
   , multiplyWith
+  -- * Storage
+  , Vectored(..)
   -- * Lenses
   , _Mat, keys, values
   ) where
@@ -54,7 +57,6 @@ import Control.DeepSeq
 import Control.Lens
 import Data.Bits
 import Data.Complex
-import Data.Foldable
 import Data.Function (on)
 import qualified Data.Vector as V
 import qualified Data.Vector.Algorithms.Insertion as Sort
@@ -68,6 +70,7 @@ import Data.Word
 import Prelude hiding (head, last, null)
 import Sparse.Matrix.Internal.Fusion as Fusion
 import Sparse.Matrix.Internal.Key
+import Sparse.Matrix.Internal.Vectored
 import Sparse.Matrix.Internal.Heap as Heap hiding (head)
 import Text.Read
 
@@ -76,7 +79,7 @@ import Text.Read
 
 -- * Distinguishable Zero
 
-class Num a => Eq0 a where
+class (Vectored a, Num a) => Eq0 a where
   -- | Return whether or not the element is 0.
   --
   -- It may be okay to never return 'True', but you won't be
@@ -114,7 +117,7 @@ class Num a => Eq0 a where
   -- @
   -- 'addMats' = 'addWith0' '$' 'nonZero' ('+')
   -- @
-  addMats :: G.Vector v a => Mat v a -> Mat v a -> Mat v a
+  addMats :: Mat a -> Mat a -> Mat a
   addMats = addWith0 $ nonZero (+)
   {-# INLINE addMats #-}
 
@@ -147,61 +150,54 @@ instance (RealFloat a, Eq0 a) => Eq0 (Complex a) where
 -- * Sparse Matrices
 
 -- invariant: all vectors are the same length
-data Mat v a = Mat {-# UNPACK #-} !Int !(U.Vector Word) !(U.Vector Word) !(v a)
-  deriving (Eq,Ord)
+data Mat a = Mat {-# UNPACK #-} !Int !(U.Vector Word) !(U.Vector Word) !(Vec a a)
+ --  deriving (Eq,Ord)
 
-instance (G.Vector v a, Show a) => Show (Mat v a) where
+deriving instance (Vectored a, Eq (Vec a a)) => Eq (Mat a)
+-- Mat n xs ys vs == Mat n' xs' ys' vs' = n == n' && xs == xs' && ys == ys' && vs == vs'
+
+deriving instance (Vectored a, Ord (Vec a a)) => Ord (Mat a)
+
+instance (Vectored a, Show a) => Show (Mat a) where
   showsPrec d m = G.showsPrec d (m^._Mat)
 
-instance (G.Vector v a, Read a) => Read (Mat v a) where
+instance (Vectored a, Read a) => Read (Mat a) where
   readPrec = (_Mat #) <$> G.readPrec
 
-instance NFData (v a) => NFData (Mat v a) where
+instance NFData (Vec a a) => NFData (Mat a) where
   rnf (Mat _ xs ys vs) = rnf xs `seq` rnf ys `seq` rnf vs `seq` ()
 
 -- | bundle up the matrix in a form suitable for vector-algorithms
-_Mat :: Iso (Mat u a) (Mat v b) (H.Vector U.Vector u (Key, a)) (H.Vector U.Vector v (Key, b))
+_Mat :: Vectored a => Iso' (Mat a) (H.Vector U.Vector (Vec a) (Key, a))
 _Mat = iso (\(Mat n xs ys vs) -> H.V (V_Key n xs ys) vs)
            (\(H.V (V_Key n xs ys) vs) -> Mat n xs ys vs)
 {-# INLINE _Mat #-}
 
 -- | Access the keys of a matrix
-keys :: Lens' (Mat v a) (U.Vector Key)
+keys :: Lens' (Mat a) (U.Vector Key)
 keys f (Mat n xs ys vs) = f (V_Key n xs ys) <&> \ (V_Key n' xs' ys') -> Mat n' xs' ys' vs
 {-# INLINE keys #-}
 
 -- | Access the keys of a matrix
-values :: Lens (Mat u a) (Mat v b) (u a) (v b)
+values :: Lens (Mat a) (Mat b) (Vec a a) (Vec b b)
 values f (Mat n xs ys vs) = Mat n xs ys <$> f vs
 {-# INLINE values #-}
 
-instance Functor v => Functor (Mat v) where
-  fmap = over (values.mapped)
-  {-# INLINE fmap #-}
-
-instance Foldable v => Foldable (Mat v) where
-  foldMap = foldMapOf (values.folded)
-  {-# INLINE foldMap #-}
-
-instance Traversable v => Traversable (Mat v) where
-  traverse = values.traverse
-  {-# INLINE traverse #-}
-
-type instance IxValue (Mat v a) = a
-type instance Index (Mat v a) = Key
+type instance IxValue (Mat a) = a
+type instance Index (Mat a) = Key
 
 -- traverse a Vector
 eachV :: (Applicative f, G.Vector v a, G.Vector v b) => (a -> f b) -> v a -> f (v b)
 eachV f v = G.fromListN (G.length v) <$> traverse f (G.toList v)
 
-instance (Applicative f, G.Vector v a, G.Vector v b) => Each f (Mat v a) (Mat v b) a b where
+instance (Applicative f, Vectored a, a ~ b) => Each f (Mat a) (Mat b) a b where
   each f = _Mat $ eachV $ \(k,v) -> (,) k <$> indexed f k v
   {-# INLINE each #-}
 
-instance (Functor f, Contravariant f, G.Vector v a) => Contains f (Mat v a) where
+instance (Functor f, Contravariant f, Vectored a) => Contains f (Mat a) where
   contains = containsIx
 
-instance (Applicative f, G.Vector v a) => Ixed f (Mat v a) where
+instance (Applicative f, Vectored a) => Ixed f (Mat a) where
   ix ij@(Key i j) f m@(Mat n xs ys vs)
     | Just i' <- xs U.!? l, i == i'
     , Just j' <- ys U.!? l, j == j' = indexed f ij (vs G.! l) <&> \v -> Mat n xs ys (vs G.// [(l,v)])
@@ -209,24 +205,27 @@ instance (Applicative f, G.Vector v a) => Ixed f (Mat v a) where
     where l = search (\k -> Key (xs U.! k) (ys U.! k) >= ij) 0 n
   {-# INLINE ix #-}
 
-instance (G.Vector v a, Num a, Eq0 a) => Eq0 (Mat v a) where
+instance Vectored a => Vectored (Mat a) where
+  type Vec (Mat a) = V.Vector -- boxed
+
+instance (Vectored a, Eq0 a) => Eq0 (Mat a) where
   isZero (Mat n _ _ _) = n == 0
   {-# INLINE isZero #-}
 
 -- * Construction
 
 -- | Build a sparse matrix.
-fromList :: G.Vector v a => [(Key, a)] -> Mat v a
+fromList :: Vectored a => [(Key, a)] -> Mat a
 fromList xs = _Mat # H.modify (Sort.sortBy (compare `on` fst)) (H.fromList xs)
 {-# INLINABLE fromList #-}
 
 -- | Transpose a matrix
-transpose :: G.Vector v a => Mat v a -> Mat v a
+transpose :: Vectored a => Mat a -> Mat a
 transpose xs = xs & _Mat %~ H.modify (Sort.sortBy (compare `on` fst)) . H.map (first swap)
 {-# INLINE transpose #-}
 
 -- | @singleton@ makes a matrix with a singleton value at a given location
-singleton :: G.Vector v a => Key -> a -> Mat v a
+singleton :: Vectored a => Key -> a -> Mat a
 singleton k v = _Mat # H.singleton (k,v)
 {-# INLINE singleton #-}
 
@@ -234,7 +233,7 @@ singleton k v = _Mat # H.singleton (k,v)
 --
 -- >>> ident 4 :: Mat U.Vector Int
 -- fromList [(Key 0 0,1),(Key 1 1,1),(Key 2 2,1),(Key 3 3,1)]
-ident :: (G.Vector v a, Num a) => Int -> Mat v a
+ident :: (Vectored a, Num a) => Int -> Mat a
 ident w = Mat w (U.generate w fromIntegral) (U.generate w fromIntegral) (G.replicate w 1)
 {-# INLINE ident #-}
 
@@ -242,7 +241,7 @@ ident w = Mat w (U.generate w fromIntegral) (U.generate w fromIntegral) (G.repli
 --
 -- >>> empty :: Mat U.Vector Int
 -- fromList []
-empty :: G.Vector v a => Mat v a
+empty :: Vectored a => Mat a
 empty = Mat 0 U.empty U.empty G.empty
 {-# INLINE empty #-}
 
@@ -252,22 +251,21 @@ empty = Mat 0 U.empty U.empty G.empty
 --
 -- >>> size (ident 4 :: Mat U.Vector Int)
 -- 4
-size :: Mat v a -> Int
+size :: Mat a -> Int
 size (Mat n _ _ _) = n
 {-# INLINE size #-}
 
 -- |
 -- >>> null (empty :: Mat U.Vector Int)
 -- True
-null :: Mat v a -> Bool
+null :: Mat a -> Bool
 null (Mat n _ _ _) = n == 0
 {-# INLINE null #-}
 
-instance (G.Vector v a, Num a, Eq0 a) => Num (Mat v a) where
-  {-# SPECIALIZE instance (Num a, Eq0 a) => Num (Mat V.Vector a) #-}
-  {-# SPECIALIZE instance Num (Mat U.Vector Int) #-}
-  {-# SPECIALIZE instance Num (Mat U.Vector Double) #-}
-  {-# SPECIALIZE instance Num (Mat U.Vector (Complex Double)) #-}
+instance (Vectored a, Eq0 a) => Num (Mat a) where
+  {-# SPECIALIZE instance Num (Mat Int) #-}
+  {-# SPECIALIZE instance Num (Mat Double) #-}
+  {-# SPECIALIZE instance Num (Mat (Complex Double)) #-}
   abs    = over each abs
   {-# INLINE abs #-}
   signum = over each signum
@@ -296,7 +294,7 @@ search p = go where
     where m = l + div (h-l) 2
 {-# INLINE search #-}
 
-split1 :: G.Vector v a => Word -> Word -> Mat v a -> (Mat v a, Mat v a)
+split1 :: Vectored a => Word -> Word -> Mat a -> (Mat a, Mat a)
 split1 ai bi (Mat n xs ys vs) = (m0,m1)
   where
     !aibi = xor ai bi
@@ -308,7 +306,7 @@ split1 ai bi (Mat n xs ys vs) = (m0,m1)
     !m1 = Mat (n-k) xs1 ys1 vs1
 {-# INLINE split1 #-}
 
-split2 :: G.Vector v a => Word -> Word -> Mat v a -> (Mat v a, Mat v a)
+split2 :: Vectored a => Word -> Word -> Mat a -> (Mat a, Mat a)
 split2 aj bj (Mat n xs ys vs) = (m0,m1)
   where
     !ajbj = xor aj bj
@@ -322,18 +320,18 @@ split2 aj bj (Mat n xs ys vs) = (m0,m1)
 
 -- | Merge two matrices where the indices coincide into a new matrix. This provides for generalized
 -- addition, but where the summation of two non-zero entries is necessarily non-zero.
-addWith :: G.Vector v a => (a -> a -> a) -> Mat v a -> Mat v a -> Mat v a
+addWith :: Vectored a => (a -> a -> a) -> Mat a -> Mat a -> Mat a
 addWith f xs ys = _Mat # G.unstream (mergeStreamsWith f (G.stream (xs^._Mat)) (G.stream (ys^._Mat)))
 {-# INLINE addWith #-}
 
 -- | Merge two matrices where the indices coincide into a new matrix. This provides for generalized
 -- addition. Return 'Nothing' for zero.
-addWith0 :: G.Vector v a => (a -> a -> Maybe a) -> Mat v a -> Mat v a -> Mat v a
+addWith0 :: Vectored a => (a -> a -> Maybe a) -> Mat a -> Mat a -> Mat a
 addWith0 f xs ys = _Mat # G.unstream (mergeStreamsWith0 f (G.stream (xs^._Mat)) (G.stream (ys^._Mat)))
 {-# INLINE addWith0 #-}
 
 -- | Multiply two matrices using the specified multiplication and addition operation.
-multiplyWith :: G.Vector v a => (a -> a -> a) -> (Maybe (Heap a) -> Stream (Key, a)) -> Mat v a -> Mat v a -> Mat v a
+multiplyWith :: Vectored a => (a -> a -> a) -> (Maybe (Heap a) -> Stream (Key, a)) -> Mat a -> Mat a -> Mat a
 {-# INLINEABLE multiplyWith #-}
 multiplyWith times make x0 y0 = case compare (size x0) 1 of
   LT -> empty
@@ -405,6 +403,6 @@ multiplyWith times make x0 y0 = case compare (size x0) 1 of
     hi (Mat _ xs ys _) = Key (U.last xs) (U.last ys)
     {-# INLINE hi #-}
 
-    head :: G.Vector v a => Mat v a -> a
+    head :: Vectored a => Mat a -> a
     head (Mat _ _ _ vs) = G.head vs
     {-# INLINE head #-}

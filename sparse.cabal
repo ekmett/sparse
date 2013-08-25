@@ -75,6 +75,7 @@ library
     Sparse.Matrix.Internal.Fusion
     Sparse.Matrix.Internal.Heap
     Sparse.Matrix.Internal.Key
+    Sparse.Matrix.Internal.Vectored
 
   ghc-options: -Wall
 

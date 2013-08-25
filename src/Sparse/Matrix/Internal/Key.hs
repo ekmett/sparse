@@ -38,8 +38,8 @@ module Sparse.Matrix.Internal.Key
   , compares
   , lts, les, eqs, nes, ges, gts
   -- * Unboxed vector constructors
-  , U.MVector(..)
-  , U.Vector(..)
+  , U.MVector(MV_Key)
+  , U.Vector(V_Key)
   ) where
 
 import Data.Bits
