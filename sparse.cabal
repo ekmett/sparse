@@ -10,7 +10,7 @@ stability:     experimental
 homepage:      http://github.com/ekmett/sparse
 bug-reports:   http://github.com/ekmett/sparse/issues
 copyright:     Copyright (C) 2013 Edward A. Kmett
-build-type:    Simple
+build-type:    Custom
 synopsis:      A playground of sparse linear algebra primitives using Morton ordering
 extra-source-files:
   .ghci
@@ -28,6 +28,12 @@ flag test-properties
   default: True
   manual: True
 
+-- You can disable the doctests test suite with -f-test-doctests
+flag test-doctests
+  default: True
+  manual: True
+
+
 flag optimize
   default: False
   manual: True
@@ -39,7 +45,6 @@ flag llvm
 library
   build-depends:
     base              >= 4     && < 5,
-    bits              >= 0.3.2 && < 1,
     contravariant     >= 0.4.2 && < 1,
     deepseq           >= 1.1   && < 1.4,
     hybrid-vectors    >= 0.1   && < 1,
@@ -69,6 +74,31 @@ library
 
   if impl(ghc<6.13)
     Ghc-Options: -finline-if-enough-args -fno-method-sharing
+
+-- Verify the results of the examples
+test-suite doctests
+  type:           exitcode-stdio-1.0
+  main-is:        doctests.hs
+  ghc-options:    -Wall -threaded
+  hs-source-dirs: tests
+
+  if !flag(test-doctests)
+    buildable: False
+  else
+    build-depends:
+      base,
+      bytestring,
+      containers,
+      directory      >= 1.0,
+      deepseq,
+      doctest        >= 0.9.1,
+      filepath,
+      mtl,
+      semigroups     >= 0.9,
+      simple-reflect >= 0.3.1
+
+  if impl(ghc<7.6.1)
+    ghc-options: -Werror
 
 test-suite properties
   type: exitcode-stdio-1.0
@@ -105,3 +135,5 @@ benchmark mm
     deepseq,
     sparse,
     vector
+
+

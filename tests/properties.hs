@@ -22,7 +22,7 @@ import Test.QuickCheck.Function
 import Linear
 
 -- model for matrix multiplication
-type Linear a = Map Word32 (Map Word32 a)
+type Linear a = Map Word (Map Word a)
 
 nonEmpty :: Lens' (Maybe (Map k Int)) (Map k Int)
 nonEmpty f m = f (fromMaybe M.empty m) <&> \ m -> m <$ guard (not (M.null m))
