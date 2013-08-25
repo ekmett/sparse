@@ -38,6 +38,7 @@ module Sparse.Matrix
   , empty
   -- * Consumption
   , size
+  , null
   -- * Distinguishable Zero
   , Eq0(..)
   -- * Customization
@@ -49,6 +50,7 @@ module Sparse.Matrix
 
 import Control.Applicative hiding (empty)
 import Control.Arrow
+import Control.DeepSeq
 import Control.Lens
 import Data.Bits
 import Data.Complex
@@ -63,11 +65,11 @@ import qualified Data.Vector.Unboxed as U
 import Data.Vector.Fusion.Stream (Stream, sized)
 import Data.Vector.Fusion.Stream.Size
 import Data.Word
-import Prelude hiding (head, last)
+import Prelude hiding (head, last, null)
 import Sparse.Matrix.Internal.Fusion as Fusion
 import Sparse.Matrix.Internal.Key
 import Sparse.Matrix.Internal.Heap as Heap hiding (head)
-import Control.DeepSeq
+import Text.Read
 
 -- import Debug.Trace
 -- import Numeric.Lens
@@ -86,6 +88,17 @@ class Num a => Eq0 a where
   isZero = (0 ==)
   {-# INLINE isZero #-}
 #endif
+
+  -- | Remove results that are equal to zero from a simpler function.
+  --
+  -- When used with @addWith@ or @multiplyWith@'s additive argument
+  -- this can help retain the sparsity of the matrix.
+  nonZero :: (x -> y -> a) -> x -> y -> Maybe a
+  nonZero f a b = case f a b of
+    c | isZero c -> Nothing
+      | otherwise -> Just c
+  {-# INLINE nonZero #-}
+
   -- |
   -- Add two matrices. By default this assumes 'isZero' can
   -- possibly return 'True' after an addition. For some
@@ -95,10 +108,15 @@ class Num a => Eq0 a where
   -- @
   -- 'addMats' = 'addWith' ('+')
   -- @
+  --
+  -- By default this will use
+  --
+  -- @
+  -- 'addMats' = 'addWith0' '$' 'nonZero' ('+')
+  -- @
   addMats :: G.Vector v a => Mat v a -> Mat v a -> Mat v a
   addMats = addWith0 $ nonZero (+)
   {-# INLINE addMats #-}
-
 
   -- | Convert from a 'Heap' to a 'Stream'.
   --
@@ -117,17 +135,6 @@ class Num a => Eq0 a where
   addHeap :: Maybe (Heap a) -> Stream (Key, a)
   addHeap = Heap.streamHeapWith0 $ nonZero (+)
 
-  -- | Remove results that are equal to zero from a simpler function.
-  --
-  -- When used with @addWith@ or @multiplyWith@'s additive argument
-  -- this can help retain the sparsity of the matrix.
-  nonZero :: (x -> y -> a) -> x -> y -> Maybe a
-  nonZero f a b = case f a b of
-    c | isZero c -> Nothing
-      | otherwise -> Just c
-  {-# INLINE nonZero #-}
-
-
 instance Eq0 Int
 instance Eq0 Word
 instance Eq0 Integer
@@ -141,7 +148,13 @@ instance (RealFloat a, Eq0 a) => Eq0 (Complex a) where
 
 -- invariant: all vectors are the same length
 data Mat v a = Mat {-# UNPACK #-} !Int !(U.Vector Word) !(U.Vector Word) !(v a)
-  deriving (Show, Read, Eq,Ord)
+  deriving (Eq,Ord)
+
+instance (G.Vector v a, Show a) => Show (Mat v a) where
+  showsPrec d m = G.showsPrec d (m^._Mat)
+
+instance (G.Vector v a, Read a) => Read (Mat v a) where
+  readPrec = (_Mat #) <$> G.readPrec
 
 instance NFData (v a) => NFData (Mat v a) where
   rnf (Mat _ xs ys vs) = rnf xs `seq` rnf ys `seq` rnf vs `seq` ()
@@ -218,11 +231,17 @@ singleton k v = _Mat # H.singleton (k,v)
 {-# INLINE singleton #-}
 
 -- | @ident n@ makes an @n@ x @n@ identity matrix
+--
+-- >>> ident 4 :: Mat U.Vector Int
+-- fromList [(Key 0 0,1),(Key 1 1,1),(Key 2 2,1),(Key 3 3,1)]
 ident :: (G.Vector v a, Num a) => Int -> Mat v a
 ident w = Mat w (U.generate w fromIntegral) (U.generate w fromIntegral) (G.replicate w 1)
 {-# INLINE ident #-}
 
 -- | The empty matrix
+--
+-- >>> empty :: Mat U.Vector Int
+-- fromList []
 empty :: G.Vector v a => Mat v a
 empty = Mat 0 U.empty U.empty G.empty
 {-# INLINE empty #-}
@@ -230,9 +249,19 @@ empty = Mat 0 U.empty U.empty G.empty
 -- * Consumption
 
 -- | Count the number of non-zero entries in the matrix
+--
+-- >>> size (ident 4 :: Mat U.Vector Int)
+-- 4
 size :: Mat v a -> Int
 size (Mat n _ _ _) = n
 {-# INLINE size #-}
+
+-- |
+-- >>> null (empty :: Mat U.Vector Int)
+-- True
+null :: Mat v a -> Bool
+null (Mat n _ _ _) = n == 0
+{-# INLINE null #-}
 
 instance (G.Vector v a, Num a, Eq0 a) => Num (Mat v a) where
   {-# SPECIALIZE instance (Num a, Eq0 a) => Num (Mat V.Vector a) #-}
@@ -292,12 +321,13 @@ split2 aj bj (Mat n xs ys vs) = (m0,m1)
 {-# INLINE split2 #-}
 
 -- | Merge two matrices where the indices coincide into a new matrix. This provides for generalized
--- addition. Return 'Nothing' for zero.
---
+-- addition, but where the summation of two non-zero entries is necessarily non-zero.
 addWith :: G.Vector v a => (a -> a -> a) -> Mat v a -> Mat v a -> Mat v a
 addWith f xs ys = _Mat # G.unstream (mergeStreamsWith f (G.stream (xs^._Mat)) (G.stream (ys^._Mat)))
 {-# INLINE addWith #-}
 
+-- | Merge two matrices where the indices coincide into a new matrix. This provides for generalized
+-- addition. Return 'Nothing' for zero.
 addWith0 :: G.Vector v a => (a -> a -> Maybe a) -> Mat v a -> Mat v a -> Mat v a
 addWith0 f xs ys = _Mat # G.unstream (mergeStreamsWith0 f (G.stream (xs^._Mat)) (G.stream (ys^._Mat)))
 {-# INLINE addWith0 #-}
@@ -342,18 +372,19 @@ multiplyWith times make x0 y0 = case compare (size x0) 1 of
 
     -- x and y have at least 2 non-zero elements each
     go22 xa@(Key xai xaj) x xb@(Key xbi xbj) ya@(Key yaj yak) y yb@(Key ybj ybk)
-      | gts (xor xaj yaj) (xiyj.|.ykxj) = Nothing
+      | gts (xor xaj yaj) (xiyj .|. ykxj) = Nothing
       | ges xiyj ykxj
       = if ges xi yj then case split1 xai xbi x of (m0,m1) -> go22L0 xa m0 ya y yb `mfby` go22L1 m1 xb ya y yb -- we can split on i, fby
                      else case split1 yaj ybj y of (m0,m1) -> go22R0 xa x xb ya m0 `madd` go22R1 xa x xb m1 yb -- we split on j, mix
-      | ges yk xj = case split2 yak ybk y of (m0,m1) -> go22R0 xa x xb ya m0 `mfby` go22R1 xa x xb m1 yb -- we can split on k, fby
-      | otherwise = case split2 xaj xbj x of (m0,m1) -> go22L0 xa m0 ya y yb `madd` go22L1 m1 xb ya y yb -- we split on j, mix
+      | ges yk xj       = case split2 yak ybk y of (m0,m1) -> go22R0 xa x xb ya m0 `mfby` go22R1 xa x xb m1 yb -- we can split on k, fby
+      | otherwise       = case split2 xaj xbj x of (m0,m1) -> go22L0 xa m0 ya y yb `madd` go22L1 m1 xb ya y yb -- we split on j, mix
       where
         xi = xor xai xbi
         xj = xor xaj xbj
         yj = xor yaj ybj
         yk = xor yak ybk
-        xiyj = xi .|. yj; ykxj = yk .|. xj
+        xiyj = xi .|. yj
+        ykxj = yk .|. xj
 
     go21 _ mx _ yb b = Heap.timesSingleton times (G.stream (mx^._Mat)) yb b -- linear scan. use tree and fast rejects?
     go12 xa a _ my _ = Heap.singletonTimes times xa a (G.stream (my^._Mat))
