@@ -161,7 +161,7 @@ test-suite doctests
 benchmark mm
   type:           exitcode-stdio-1.0
   main-is:        mm.hs
-  ghc-options:    -Wall -O2 -threaded -fdicts-cheap -funbox-strict-fields -fsimpl-tick-factor=400000
+  ghc-options:    -Wall -O2 -threaded -funbox-strict-fields -fsimpl-tick-factor=400000
   hs-source-dirs: benchmarks
   build-depends:
     array,
