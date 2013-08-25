@@ -43,7 +43,6 @@ module Sparse.Matrix
   -- * Customization
   , addWith
   , multiplyWith
-  , nonZero
   -- * Lenses
   , _Mat, keys, values
   ) where
@@ -117,6 +116,17 @@ class Num a => Eq0 a where
   -- @
   addHeap :: Maybe (Heap a) -> Stream (Key, a)
   addHeap = Heap.streamHeapWith0 $ nonZero (+)
+
+  -- | Remove results that are equal to zero from a simpler function.
+  --
+  -- When used with @addWith@ or @multiplyWith@'s additive argument
+  -- this can help retain the sparsity of the matrix.
+  nonZero :: (x -> y -> a) -> x -> y -> Maybe a
+  nonZero f a b = case f a b of
+    c | isZero c -> Nothing
+      | otherwise -> Just c
+  {-# INLINE nonZero #-}
+
 
 instance Eq0 Int
 instance Eq0 Word
@@ -244,16 +254,6 @@ instance (G.Vector v a, Num a, Eq0 a) => Num (Mat v a) where
   {-# INLINE (-) #-}
   (*) = multiplyWith (*) addHeap
   {-# INLINEABLE (*) #-}
-
--- | Remove results that are equal to zero from a simpler function.
---
--- When used with @addWith@ or @multiplyWith@'s additive argumnt
--- this can help retain the sparsity of the matrix.
-nonZero :: Eq0 c => (a -> b -> c) -> a -> b -> Maybe c
-nonZero f a b = case f a b of
-  c | isZero c -> Nothing
-    | otherwise -> Just c
-{-# INLINE nonZero #-}
 
 -- * Utilities
 
