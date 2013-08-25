@@ -62,7 +62,7 @@ data MV_Complex :: * -> * -> * where
   MV_Complex :: {-# UNPACK #-} !Int -> !(G.Mutable (Vec a) s a) -> !(G.Mutable (Vec a) s a) -> MV_Complex s (Complex a)
 
 data V_Complex :: * -> * where
-  V_Complex :: {-# UNPACK #-} !Int -> !(Vec a a) -> !(Vec a a) -> V_Complex (Complex a)
+  V_Complex :: {-# UNPACK #-} !Int -> !(Vector a) -> !(Vector a) -> V_Complex (Complex a)
 
 type instance G.Mutable V_Complex = MV_Complex
 
