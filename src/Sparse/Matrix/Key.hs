@@ -37,7 +37,6 @@ import Control.Lens
 import qualified Data.Vector.Generic as G
 import qualified Data.Vector.Generic.Mutable as GM
 import qualified Data.Vector.Unboxed as U
-import qualified Data.Vector.Unboxed.Mutable as UM
 import Data.Word
 
 -- * Morton Order
@@ -55,18 +54,8 @@ instance Ord Key where
     where ab = xor a b
           cd = xor c d
 
--- | Construct a key from a pair of indices.
---
--- @
--- key i j ^. _1 = i
--- key i j ^. _2 = j
--- @
-key :: Word32 -> Word32 -> Key
-key = Key
-{-# INLINE key #-}
-
 instance (a ~ Word32, b ~ Word32) => Field1 Key Key a b where
-  _1 f (Key i j) = indexed f (0 :: Int) i <&> \i' -> Key i' j
+  _1 f (Key i j) = indexed f (0 :: Int) i <&> (Key ?? j)
   {-# INLINE _1 #-}
 
 instance (a ~ Word32, b ~ Word32) => Field2 Key Key a b where
@@ -75,8 +64,8 @@ instance (a ~ Word32, b ~ Word32) => Field2 Key Key a b where
 
 instance U.Unbox Key
 
-newtype instance U.MVector s Key = MV_Key (U.MVector s (Word32,Word32))
-newtype instance U.Vector    Key = V_Key (U.Vector (Word32,Word32))
+data instance U.MVector s Key = MV_Key {-# UNPACK #-} !Int !(U.MVector s Word32) !(U.MVector s Word32)
+data instance U.Vector    Key = V_Key  {-# UNPACK #-} !Int !(U.Vector Word32) !(U.Vector Word32)
 
 instance GM.MVector U.MVector Key where
   {-# INLINE basicLength #-}
@@ -90,32 +79,31 @@ instance GM.MVector U.MVector Key where
   {-# INLINE basicSet #-}
   {-# INLINE basicUnsafeCopy #-}
   {-# INLINE basicUnsafeGrow #-}
-  basicLength (MV_Key v) = GM.basicLength v
-  basicUnsafeSlice i n (MV_Key v) = MV_Key $ GM.basicUnsafeSlice i n v
-  basicOverlaps (MV_Key v1) (MV_Key v2) = GM.basicOverlaps v1 v2
-  basicUnsafeNew n = MV_Key `liftM` GM.basicUnsafeNew n
-  basicUnsafeReplicate n (Key x y) = MV_Key `liftM` GM.basicUnsafeReplicate n (x,y)
-  basicUnsafeRead (MV_Key v) i = uncurry Key `liftM` GM.basicUnsafeRead v i
-  basicUnsafeWrite (MV_Key v) i (Key x y) = GM.basicUnsafeWrite v i (x,y)
-  basicClear (MV_Key v) = GM.basicClear v
-  basicSet (MV_Key v) (Key x y) = GM.basicSet v (x,y)
-  basicUnsafeCopy (MV_Key v1) (MV_Key v2) = GM.basicUnsafeCopy v1 v2
-  basicUnsafeMove (MV_Key v1) (MV_Key v2) = GM.basicUnsafeMove v1 v2
-  basicUnsafeGrow (MV_Key v) n = MV_Key `liftM` GM.basicUnsafeGrow v n
+  basicLength (MV_Key l _ _) = l
+  basicUnsafeSlice i n (MV_Key _ u v)               = MV_Key n (GM.basicUnsafeSlice i n u) (GM.basicUnsafeSlice i n v)
+  basicOverlaps (MV_Key _ u1 v1) (MV_Key _ u2 v2)   = GM.basicOverlaps u1 u2 || GM.basicOverlaps v1 v2
+  basicUnsafeNew n                                  = liftM2 (MV_Key n) (GM.basicUnsafeNew n) (GM.basicUnsafeNew n)
+  basicUnsafeReplicate n (Key x y)                  = liftM2 (MV_Key n) (GM.basicUnsafeReplicate n x) (GM.basicUnsafeReplicate n y)
+  basicUnsafeRead (MV_Key l u v) i                  = liftM2 Key (GM.basicUnsafeRead u i) (GM.basicUnsafeRead v i)
+  basicUnsafeWrite (MV_Key _ u v) i (Key x y)       = GM.basicUnsafeWrite u i x >> GM.basicUnsafeWrite v i y
+  basicClear (MV_Key _ u v)                         = GM.basicClear u >> GM.basicClear v
+  basicSet (MV_Key _ u v) (Key x y)                 = GM.basicSet u x >> GM.basicSet v y
+  basicUnsafeCopy (MV_Key _ u1 v1) (MV_Key _ u2 v2) = GM.basicUnsafeCopy u1 u2 >> GM.basicUnsafeCopy v1 v2
+  basicUnsafeMove (MV_Key _ u1 v1) (MV_Key _ u2 v2) = GM.basicUnsafeMove u1 u2 >> GM.basicUnsafeMove v1 v2
+  basicUnsafeGrow (MV_Key _ u v) n                  = liftM2 (MV_Key n) (GM.basicUnsafeGrow u n) (GM.basicUnsafeGrow v n)
 
 instance G.Vector U.Vector Key where
-
+  {-# INLINE basicLength #-}
   {-# INLINE basicUnsafeFreeze #-}
   {-# INLINE basicUnsafeThaw #-}
-  {-# INLINE basicLength #-}
   {-# INLINE basicUnsafeSlice #-}
   {-# INLINE basicUnsafeIndexM #-}
   {-# INLINE elemseq #-}
-  basicUnsafeFreeze (MV_Key v) = V_Key `liftM` G.basicUnsafeFreeze v
-  basicUnsafeThaw (V_Key v) = MV_Key `liftM` G.basicUnsafeThaw v
-  basicLength (V_Key v) = G.basicLength v
-  basicUnsafeSlice i n (V_Key v) = V_Key $ G.basicUnsafeSlice i n v
-  basicUnsafeIndexM (V_Key v) i = uncurry Key `liftM` G.basicUnsafeIndexM v i
-  basicUnsafeCopy (MV_Key mv) (V_Key v) = G.basicUnsafeCopy mv v
+  basicLength (V_Key v _ _) = v
+  basicUnsafeFreeze (MV_Key n u v)               = liftM2 (V_Key n) (G.basicUnsafeFreeze u) (G.basicUnsafeFreeze v)
+  basicUnsafeThaw (V_Key n u v)                  = liftM2 (MV_Key n) (G.basicUnsafeThaw u) (G.basicUnsafeThaw v)
+  basicUnsafeSlice i n (V_Key _ u v)             = V_Key n (G.basicUnsafeSlice i n u) (G.basicUnsafeSlice i n v)
+  basicUnsafeIndexM (V_Key _ u v) i              = liftM2 Key (G.basicUnsafeIndexM u i) (G.basicUnsafeIndexM v i)
+  basicUnsafeCopy (MV_Key _ mu mv) (V_Key _ u v) = G.basicUnsafeCopy mu u >> G.basicUnsafeCopy mv v
   elemseq _ (Key x y) z = G.elemseq (undefined :: U.Vector Word32) x
                         $ G.elemseq (undefined :: U.Vector Word32) y z
