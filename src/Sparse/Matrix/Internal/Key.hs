@@ -46,6 +46,12 @@ import Data.Word
 
 -- | @Key i j@ logically orders the keys as if the bits of the keys @i@ and @j@
 -- were interleaved. This is equivalent to storing the keys in \"Morton Order\".
+--
+-- >>> Key 100 200 ^. _1
+-- 100
+--
+-- >>> Key 100 200 ^. _2
+-- 200
 data Key = Key {-# UNPACK #-} !Word {-# UNPACK #-} !Word
   deriving (Show, Read, Eq)
 
