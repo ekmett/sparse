@@ -29,6 +29,10 @@
 
 module Sparse.Matrix.Key
   ( Key(..)
+  , compares
+  , lts, les, eqs, nes, ges, gts
+  , U.MVector(..)
+  , U.Vector(..)
   ) where
 
 import Data.Bits
@@ -84,7 +88,7 @@ instance GM.MVector U.MVector Key where
   basicOverlaps (MV_Key _ u1 v1) (MV_Key _ u2 v2)   = GM.basicOverlaps u1 u2 || GM.basicOverlaps v1 v2
   basicUnsafeNew n                                  = liftM2 (MV_Key n) (GM.basicUnsafeNew n) (GM.basicUnsafeNew n)
   basicUnsafeReplicate n (Key x y)                  = liftM2 (MV_Key n) (GM.basicUnsafeReplicate n x) (GM.basicUnsafeReplicate n y)
-  basicUnsafeRead (MV_Key l u v) i                  = liftM2 Key (GM.basicUnsafeRead u i) (GM.basicUnsafeRead v i)
+  basicUnsafeRead (MV_Key _ u v) i                  = liftM2 Key (GM.basicUnsafeRead u i) (GM.basicUnsafeRead v i)
   basicUnsafeWrite (MV_Key _ u v) i (Key x y)       = GM.basicUnsafeWrite u i x >> GM.basicUnsafeWrite v i y
   basicClear (MV_Key _ u v)                         = GM.basicClear u >> GM.basicClear v
   basicSet (MV_Key _ u v) (Key x y)                 = GM.basicSet u x >> GM.basicSet v y
@@ -107,3 +111,34 @@ instance G.Vector U.Vector Key where
   basicUnsafeCopy (MV_Key _ mu mv) (V_Key _ u v) = G.basicUnsafeCopy mu u >> G.basicUnsafeCopy mv v
   elemseq _ (Key x y) z = G.elemseq (undefined :: U.Vector Word32) x
                         $ G.elemseq (undefined :: U.Vector Word32) y z
+
+compares :: Word32 -> Word32 -> Ordering
+compares a b = case compare a b of
+  LT | a < xor a b -> LT
+  GT | b < xor a b -> GT
+  _ -> EQ
+{-# INLINE compares #-}
+
+lts :: Word32 -> Word32 -> Bool
+lts a b = a < b && a < xor a b
+{-# INLINE lts #-}
+
+les :: Word32 -> Word32 -> Bool
+les a b = a <= b || xor a b <= b
+{-# INLINE les #-}
+
+eqs :: Word32 -> Word32 -> Bool
+eqs a b = compares a b == EQ
+{-# INLINE eqs #-}
+
+nes :: Word32 -> Word32 -> Bool
+nes a b = compares a b /= EQ
+{-# INLINE nes #-}
+
+gts :: Word32 -> Word32 -> Bool
+gts a b = a > b && xor a b > b
+{-# INLINE gts #-}
+
+ges :: Word32 -> Word32 -> Bool
+ges a b = a >= b || a >= xor a b
+{-# INLINE ges #-}
