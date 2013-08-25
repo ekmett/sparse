@@ -55,8 +55,9 @@ flag test-hlint
   default: True
   manual: True
 
+-- You can disable the optimizations -f-optimize for faster builds
 flag optimize
-  default: False
+  default: True
   manual: True
 
 flag llvm
