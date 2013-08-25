@@ -100,12 +100,6 @@ class Num a => Eq0 a where
   addMats = addWith0 $ nonZero (+)
   {-# INLINE addMats #-}
 
-  -- |
-  -- Subtract two matrices. By default this assumes 'isZero' can
-  -- possibly return 'True' after a subtraction.
-  subMats :: G.Vector v a => Mat v a -> Mat v a -> Mat v a
-  subMats = addWith0 $ nonZero (-)
-  {-# INLINE subMats #-}
 
   -- | Convert from a 'Heap' to a 'Stream'.
   --
@@ -123,9 +117,6 @@ class Num a => Eq0 a where
   -- @
   addHeap :: Maybe (Heap a) -> Stream (Key, a)
   addHeap = Heap.streamHeapWith0 $ nonZero (+)
-
-  subHeap :: Maybe (Heap a) -> Stream (Key, a)
-  subHeap = Heap.streamHeapWith0 $ nonZero (-)
 
 instance Eq0 Int
 instance Eq0 Word
@@ -249,7 +240,7 @@ instance (G.Vector v a, Num a, Eq0 a) => Num (Mat v a) where
   {-# INLINE fromInteger #-}
   (+) = addMats
   {-# INLINE (+) #-}
-  (-) = subMats
+  (-) = addWith0 $ nonZero (-)
   {-# INLINE (-) #-}
   (*) = multiplyWith (*) addHeap
   {-# INLINEABLE (*) #-}
