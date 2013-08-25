@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE KindSignatures #-}
@@ -58,11 +59,13 @@ instance Vectored Integer where
 
 -- * Complex numbers are boxed or unboxed based on their components
 
+#ifndef HLINT
 data MV_Complex :: * -> * -> * where
   MV_Complex :: {-# UNPACK #-} !Int -> !(G.Mutable (Vec a) s a) -> !(G.Mutable (Vec a) s a) -> MV_Complex s (Complex a)
 
 data V_Complex :: * -> * where
   V_Complex :: {-# UNPACK #-} !Int -> !(Vector a) -> !(Vector a) -> V_Complex (Complex a)
+#endif
 
 type instance G.Mutable V_Complex = MV_Complex
 
