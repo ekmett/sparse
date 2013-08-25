@@ -403,6 +403,5 @@ multiplyWith times make x0 y0 = case compare (size x0) 1 of
     hi (Mat _ xs ys _) = Key (U.last xs) (U.last ys)
     {-# INLINE hi #-}
 
-    head :: Vectored a => Mat a -> a
     head (Mat _ _ _ vs) = G.head vs
     {-# INLINE head #-}
