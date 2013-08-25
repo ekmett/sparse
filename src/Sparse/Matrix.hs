@@ -162,7 +162,7 @@ instance (Vectored a, Show a) => Show (Mat a) where
   showsPrec d m = G.showsPrec d (m^._Mat)
 
 instance (Vectored a, Read a) => Read (Mat a) where
-  readPrec = (_Mat #) <$> G.readPrec
+  readPrec = (_Mat # ) <$> G.readPrec
 
 instance NFData (I.Vector a) => NFData (Mat a) where
   rnf (Mat _ xs ys vs) = rnf xs `seq` rnf ys `seq` rnf vs `seq` ()
@@ -231,7 +231,7 @@ singleton k v = _Mat # H.singleton (k,v)
 
 -- | @ident n@ makes an @n@ x @n@ identity matrix
 --
--- >>> ident 4 :: Mat U.Vector Int
+-- >>> ident 4
 -- fromList [(Key 0 0,1),(Key 1 1,1),(Key 2 2,1),(Key 3 3,1)]
 ident :: (Vectored a, Num a) => Int -> Mat a
 ident w = Mat w (U.generate w fromIntegral) (U.generate w fromIntegral) (G.replicate w 1)
@@ -239,7 +239,7 @@ ident w = Mat w (U.generate w fromIntegral) (U.generate w fromIntegral) (G.repli
 
 -- | The empty matrix
 --
--- >>> empty :: Mat U.Vector Int
+-- >>> empty :: Mat Int
 -- fromList []
 empty :: Vectored a => Mat a
 empty = Mat 0 U.empty U.empty G.empty
@@ -249,14 +249,14 @@ empty = Mat 0 U.empty U.empty G.empty
 
 -- | Count the number of non-zero entries in the matrix
 --
--- >>> size (ident 4 :: Mat U.Vector Int)
+-- >>> size (ident 4)
 -- 4
 size :: Mat a -> Int
 size (Mat n _ _ _) = n
 {-# INLINE size #-}
 
 -- |
--- >>> null (empty :: Mat U.Vector Int)
+-- >>> null (empty :: Mat Int)
 -- True
 null :: Mat a -> Bool
 null (Mat n _ _ _) = n == 0
