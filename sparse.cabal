@@ -112,7 +112,7 @@ test-suite properties
       hybrid-vectors,
       lens,
       linear                     >= 1.2 && < 2,
-      QuickCheck                 >= 2.5,
+      QuickCheck                 >= 2.5 && < 2.6,
       sparse,
       test-framework             >= 0.6,
       test-framework-quickcheck2 >= 0.3,
