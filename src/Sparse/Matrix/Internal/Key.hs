@@ -8,7 +8,6 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE GADTs #-}
-
 -----------------------------------------------------------------------------
 -- |
 -- Copyright   :  (C) 2013 Edward Kmett
@@ -24,6 +23,10 @@
 --
 -- See <http://en.wikipedia.org/wiki/Z-order_curve> for more information
 -- about Morton order.
+--
+-- How to perform the comparison without interleaving is described in
+--
+-- <https://www.fpcomplete.com/user/edwardk/revisiting-matrix-multiplication-part-2>
 --
 ----------------------------------------------------------------------------
 module Sparse.Matrix.Internal.Key
