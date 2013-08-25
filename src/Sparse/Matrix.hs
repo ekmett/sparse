@@ -336,7 +336,7 @@ multiplyWith :: Vectored a => (a -> a -> a) -> (Maybe (Heap a) -> Stream (Key, a
 multiplyWith times make x0 y0 = case compare (size x0) 1 of
   LT -> empty
   EQ | size y0 == 1 -> _Mat # (G.unstream $ hint $ make $ go11 (lo x0) (head x0) (lo y0) (head y0))
-     | otherwise     -> _Mat # (G.unstream $ hint $ make $ go12 (lo x0) (head x0) (lo y0) y0 (hi y0))
+     | otherwise    -> _Mat # (G.unstream $ hint $ make $ go12 (lo x0) (head x0) (lo y0) y0 (hi y0))
   GT -> case compare (size y0) 1 of
       LT -> empty
       EQ -> _Mat # (G.unstream $ hint $ make $ go21 (lo x0) x0 (hi x0) (lo y0) (head y0))
