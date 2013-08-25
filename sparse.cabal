@@ -53,7 +53,6 @@ library
 
   exposed-modules:
     Sparse.Matrix
-    Sparse.Matrix.Fusion
     Sparse.Matrix.Heap
     Sparse.Matrix.Key
 
