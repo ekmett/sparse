@@ -1,3 +1,11 @@
+0.7
+---
+* Switched to using an internal vector type that unboxes as much as it can. This lets type inference work much better when playing around at the ghci REPL.
+
+0.6
+---
+* Version bumped to exceed the # of Hans Hoglund's `sparse` package. He started and released his library during the creation of this library, but graciously offered to let me take over the name. His library is now on hackage as `sparser`.
+
 0.1
 ---
 * Repository initialized.
