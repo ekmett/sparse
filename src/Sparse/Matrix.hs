@@ -280,7 +280,7 @@ instance (Vectored a, Eq0 a) => Num (Mat a) where
   (-) = addWith0 $ nonZero (-)
   {-# INLINE (-) #-}
   (*) = multiplyWith (*) addHeap
-  {-# INLINEABLE (*) #-}
+  {-# INLINE (*) #-}
 
 -- * Utilities
 
