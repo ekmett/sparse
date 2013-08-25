@@ -3,12 +3,25 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE TypeFamilies #-}
-module Sparse.Matrix.Heap
+-----------------------------------------------------------------------------
+-- |
+-- Copyright   :  (C) 2013 Edward Kmett
+-- License     :  BSD-style (see the file LICENSE)
+-- Maintainer  :  Edward Kmett <ekmett@gmail.com>
+-- Stability   :  experimental
+-- Portability :  non-portable
+--
+-- Bootstrapped catenable non-empty pairing heaps as described in
+--
+-- <https://www.fpcomplete.com/user/edwardk/revisiting-matrix-multiplication-part-5>
+-----------------------------------------------------------------------------
+module Sparse.Matrix.Internal.Heap
   ( Heap(..)
   , fby
   , mix
-  , top
   , singleton
+  , head
+  , tail
   , fromList
   , fromAscList
   , streamHeapWith
@@ -21,10 +34,11 @@ import Control.Applicative
 import Control.Lens
 import Data.Foldable
 import Data.Monoid
-import Data.Vector.Fusion.Stream.Monadic hiding (singleton, fromList)
+import Data.Vector.Fusion.Stream.Monadic hiding (singleton, fromList, head, tail)
 import Data.Vector.Fusion.Stream.Size
 import Data.Vector.Fusion.Util
-import Sparse.Matrix.Key
+import Sparse.Matrix.Internal.Key
+import Prelude hiding (head, tail)
 
 -- | Bootstrapped _catenable_ non-empty pairing heaps
 data Heap a = Heap {-# UNPACK #-} !Key a [Heap a] [Heap a] [Heap a]
@@ -34,23 +48,17 @@ data Heap a = Heap {-# UNPACK #-} !Key a [Heap a] [Heap a] [Heap a]
 fby :: Heap a -> Heap a -> Heap a
 fby (Heap i a as ls rs) r = Heap i a as ls (r:rs)
 
-
 -- | Interleave two heaps making a new 'Heap'
 mix :: Heap a -> Heap a -> Heap a
 mix x@(Heap i a as al ar) y@(Heap j b bs bl br)
   | i <= j    = Heap i a (y:pops as al ar) [] []
   | otherwise = Heap j b (x:pops bs bl br) [] []
 
-top :: Heap a -> (Key, a)
-top (Heap i a _ _ _) = (i, a)
+head :: Heap a -> (Key, a)
+head (Heap i a _ _ _) = (i, a)
 
--- violates the Stream fusion guidelines
-pop :: [Heap a] -> [Heap a] -> [Heap a] -> Maybe (Heap a)
-pop (x:xs) ls     rs = Just $ fbys (meld x xs) ls rs
-pop []     (l:ls) rs = Just $ fbys l ls rs
-pop []     []     rs = case reverse rs of
-  f:fs -> Just (fbys f fs [])
-  []   -> Nothing
+tail :: Heap a -> Maybe (Heap a)
+tail (Heap _ _ xs fs rs) = pop xs fs rs
 
 singleton :: Key -> a -> Heap a
 singleton k v = Heap k v [] [] []
@@ -77,6 +85,13 @@ pops []     (l:ls) rs = [fbys l ls rs]
 pops []     []     rs = case reverse rs of
   f:fs -> [fbys f fs []]
   _    -> [] -- caught above by the 'go as [] []' case
+
+pop :: [Heap a] -> [Heap a] -> [Heap a] -> Maybe (Heap a)
+pop (x:xs) ls     rs = Just $ fbys (meld x xs) ls rs
+pop []     (l:ls) rs = Just $ fbys l ls rs
+pop []     []     rs = case reverse rs of
+  f:fs -> Just (fbys f fs [])
+  []   -> Nothing
 
 -- meld a list of heaps into a heap
 meld :: Heap a -> [Heap a] -> Heap a

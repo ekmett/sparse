@@ -26,8 +26,7 @@
 -- about Morton order.
 --
 ----------------------------------------------------------------------------
-
-module Sparse.Matrix.Key
+module Sparse.Matrix.Internal.Key
   ( Key(..)
   , compares
   , lts, les, eqs, nes, ges, gts

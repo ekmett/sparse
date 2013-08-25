@@ -63,9 +63,9 @@ import Data.Vector.Fusion.Stream (Stream, sized)
 import Data.Vector.Fusion.Stream.Size
 import Data.Word
 import Prelude hiding (head, last)
-import Sparse.Matrix.Fusion as Fusion
-import Sparse.Matrix.Key
-import Sparse.Matrix.Heap as Heap
+import Sparse.Matrix.Internal.Fusion as Fusion
+import Sparse.Matrix.Internal.Key
+import Sparse.Matrix.Internal.Heap as Heap hiding (head)
 import Control.DeepSeq
 
 -- import Debug.Trace

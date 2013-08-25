@@ -10,13 +10,13 @@
 -- Matrix stream fusion internals
 --
 -----------------------------------------------------------------------------
-module Sparse.Matrix.Fusion
+module Sparse.Matrix.Internal.Fusion
   ( mergeStreamsWith, mergeStreamsWith0
   ) where
 
 import Data.Vector.Fusion.Stream.Monadic (Step(..), Stream(..))
 import Data.Vector.Fusion.Stream.Size
-import Sparse.Matrix.Key
+import Sparse.Matrix.Internal.Key
 
 -- | The state for 'Stream' fusion that is used by 'mergeStreamsWith'.
 --

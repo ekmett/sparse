@@ -53,9 +53,9 @@ library
 
   exposed-modules:
     Sparse.Matrix
-    Sparse.Matrix.Fusion
-    Sparse.Matrix.Heap
-    Sparse.Matrix.Key
+    Sparse.Matrix.Internal.Fusion
+    Sparse.Matrix.Internal.Heap
+    Sparse.Matrix.Internal.Key
 
   ghc-options: -Wall
 
