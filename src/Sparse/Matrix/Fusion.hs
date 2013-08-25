@@ -12,14 +12,10 @@
 -----------------------------------------------------------------------------
 module Sparse.Matrix.Fusion
   ( mergeStreamsWith, mergeStreamsWith0
-  , timesSingleton
-  , singletonTimes
   ) where
 
-import Data.Bits
 import Data.Vector.Fusion.Stream.Monadic (Step(..), Stream(..))
 import Data.Vector.Fusion.Stream.Size
-import Data.Word
 import Sparse.Matrix.Key
 
 -- | The state for 'Stream' fusion that is used by 'mergeStreamsWith'.
@@ -124,41 +120,3 @@ mergeStreamsWith f (Stream stepa sa0 na) (Stream stepb sb0 nb)
       Done             -> Done
   {-# INLINE [0] step #-}
 {-# INLINE [1] mergeStreamsWith #-}
-
-m1, m2 :: Word64
-m1 = 0xAAAAAAAAAAAAAAAA
-m2 = 0x5555555555555555
-{-# INLINE m1 #-}
-{-# INLINE m2 #-}
-
--- | This is the internal stream fusion combinator used to multiply on the right by a singleton key
-timesSingleton :: Monad m => (a -> b -> c) -> Stream m (Key, a) -> (Key, b) -> Stream m (Key, c)
-timesSingleton f (Stream stepa sa0 na) (Key jk, b) = Stream step sa0 (toMax na) where
-  !jj = unsafeShiftR (jk .&. m1) 1
-  !kk = jk .&. m2
-  step sa = do
-    r <- stepa sa
-    return $ case r of
-      Yield (Key ij, a) sa'
-        | ij .&. m2 == jj -> Yield (Key (ij .&. m1 .|. kk), f a b) sa'
-        | otherwise -> Skip sa'
-      Skip sa'      -> Skip sa'
-      Done -> Done
-  {-# INLINE [0] step #-}
-{-# INLINE [1] timesSingleton #-}
-
--- | This is the internal stream fusion combinator used to multiply on the left by a singleton key
-singletonTimes :: Monad m => (a -> b -> c) -> (Key, a) -> Stream m (Key, b) -> Stream m (Key, c)
-singletonTimes f (Key ij, a) (Stream  stepb sb0 nb) = Stream step sb0 (toMax nb) where
-  !jj = unsafeShiftL (ij .&. m2) 1
-  !ii = ij .&. m1
-  step sb = do
-    r <- stepb sb
-    return $ case r of
-      Yield (Key jk, b) sb'
-        | jk .&. m1 == jj -> Yield (Key (ii .|. jk .&. m2), f a b) sb'
-        | otherwise -> Skip sb'
-      Skip sa' -> Skip sa'
-      Done -> Done
-  {-# INLINE [0] step #-}
-{-# INLINE [1] singletonTimes #-}
