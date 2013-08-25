@@ -132,7 +132,6 @@ instance FoldableWithIndex Key Heap where
       Just h  -> f i a `mappend` go h
   {-# INLINE ifoldMap #-}
 
--- this linearizes the heap
 instance Traversable Heap where
   traverse f xs = fromAscList <$> traverse (traverse f) (itoList xs)
   {-# INLINE traverse #-}
@@ -147,6 +146,8 @@ data HeapState a
   | Final {-# UNPACK #-} !Key a
   | Finished
 
+-- | Convert a 'Heap' into a 'Stream' folding together values with identical keys using the supplied
+-- addition operator.
 streamHeapWith :: Monad m => (a -> a -> a) -> Maybe (Heap a) -> Stream m (Key, a)
 streamHeapWith f h0 = Stream step (maybe Finished Start h0) Unknown where
   step (Start (Heap i a xs ls rs))     = return $ Skip $ maybe (Final i a) (Ready i a) $ pop xs ls rs
@@ -159,6 +160,8 @@ streamHeapWith f h0 = Stream step (maybe Finished Start h0) Unknown where
   {-# INLINE [1] step #-}
 {-# INLINE [0] streamHeapWith #-}
 
+-- | Convert a 'Heap' into a 'Stream' folding together values with identical keys using the supplied
+-- addition operator that is allowed to return a sparse 0, by returning 'Nothing'.
 streamHeapWith0 :: Monad m => (a -> a -> Maybe a) -> Maybe (Heap a) -> Stream m (Key, a)
 streamHeapWith0 f h0 = Stream step (maybe Finished Start h0) Unknown where
   step (Start (Heap i a xs ls rs))     = return $ Skip $ maybe (Final i a) (Ready i a) $ pop xs ls rs
@@ -173,7 +176,7 @@ streamHeapWith0 f h0 = Stream step (maybe Finished Start h0) Unknown where
   {-# INLINE [1] step #-}
 {-# INLINE [0] streamHeapWith0 #-}
 
--- | This is the internal stream fusion combinator used to multiply on the right by a singleton key
+-- | This is an internal 'Heap' fusion combinator used to multiply on the right by a singleton 'Key'/value pair.
 timesSingleton :: (a -> b -> c) -> Stream Id (Key, a) -> Key -> b -> Maybe (Heap c)
 timesSingleton f (Stream stepa sa0 _) (Key j k) b = start sa0 where
   start sa = case unId (stepa sa) of
@@ -190,7 +193,7 @@ timesSingleton f (Stream stepa sa0 _) (Key j k) b = start sa0 where
     Done     -> h
 {-# INLINE timesSingleton #-}
 
--- | This is the internal stream fusion combinator used to multiply on the right by a singleton key
+-- | This is an internal 'Heap' fusion combinator used to multiply on the right by a singleton 'Key'/value pair.
 singletonTimes :: (a -> b -> c) -> Key -> a -> Stream Id (Key, b) -> Maybe (Heap c)
 singletonTimes f (Key i j) a (Stream stepb sb0 _) = start sb0 where
   start sb = case unId (stepb sb) of
