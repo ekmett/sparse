@@ -12,12 +12,27 @@ bug-reports:   http://github.com/ekmett/sparse/issues
 copyright:     Copyright (C) 2013 Edward A. Kmett
 build-type:    Custom
 synopsis:      A playground of sparse linear algebra primitives using Morton ordering
+
 extra-source-files:
   .ghci
   .travis.yml
   .gitignore
   .vim.custom
-description: A playground of sparse linear algebra primitives using Morton ordering
+
+description:
+  A playground of sparse linear algebra primitives using Morton ordering
+  .
+  The design of this library is describe in the following articles on FP Complete's School of Haskell.
+  .
+  1. <https://www.fpcomplete.com/user/edwardk/revisiting-matrix-multiplication-part-1>
+  .
+  2. <https://www.fpcomplete.com/user/edwardk/revisiting-matrix-multiplication-part-2>
+  .
+  3. <https://www.fpcomplete.com/user/edwardk/revisiting-matrix-multiplication-part-3>
+  .
+  4. <https://www.fpcomplete.com/user/edwardk/revisiting-matrix-multiplication-part-4>
+  .
+  5. <https://www.fpcomplete.com/user/edwardk/revisiting-matrix-multiplication-part-5>
 
 source-repository head
   type: git
@@ -32,7 +47,6 @@ flag test-properties
 flag test-doctests
   default: True
   manual: True
-
 
 flag optimize
   default: False
