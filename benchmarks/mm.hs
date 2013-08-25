@@ -1,23 +1,22 @@
+{-# OPTIONS_GHC -fno-warn-orphans #-}
 import Control.Applicative
 import Control.DeepSeq
 import Criterion.Main
 import Data.Array.Unboxed as A
-import Data.Vector.Generic as G
-import Data.Vector.Unboxed as U
 import Sparse.Matrix as M
-import Sparse.Matrix.Heap as Heap
+import Sparse.Matrix.Internal.Heap as Heap
 
 instance NFData (UArray i e)
 
 main :: IO ()
 main = defaultMain
   [ bench "naive I_32"  $ nf (\x -> mmul x x) $ array ((0,0),(31,31)) $ [ ((i, j), if i == j then 1 else 0) | i <- [0..31], j <- [0..31] ]
-  , bench "I_32 new"     $ nf (\x -> x * x) (ident 32 :: Mat U.Vector Int)
-  , bench "I_64 new"     $ nf (\x -> x * x) (ident 64 :: Mat U.Vector Int)
-  , bench "I_128 new"    $ nf (\x -> x * x) (ident 128 :: Mat U.Vector Int)
-  -- , bench "I_256"       $ nf (\x -> x * x) (ident 256 :: Mat U.Vector Int)
-  -- , bench "I_512"      $ nf (\x -> x * x) (ident 1024 :: Mat U.Vector Int)
-  -- , bench "I_1024"      $ nf (\x -> x * x) (ident 1024 :: Mat U.Vector Int)
+  , bench "I_32 new"     $ nf (\x -> x * x) (ident 32 :: Mat Int)
+  , bench "I_64 new"     $ nf (\x -> x * x) (ident 64 :: Mat Int)
+  , bench "I_128 new"    $ nf (\x -> x * x) (ident 128 :: Mat Int)
+  -- , bench "I_256"       $ nf (\x -> x * x) (ident 256 :: Mat Int)
+  -- , bench "I_512"      $ nf (\x -> x * x) (ident 1024 :: Mat Int)
+  -- , bench "I_1024"      $ nf (\x -> x * x) (ident 1024 :: Mat Int)
   , bench "naive 32x32"  $ nf (\x -> mmul x x) $ listArray ((0,0),(31,31)) $ Prelude.replicate (32*32) 1
   , bench "32x32 Int"    $ nf (\x -> x * x) blockInt
   , bench "32x32 ()"     $ nf (\x -> multiplyWith const (Heap.streamHeapWith const) x x) blockUnit
@@ -26,16 +25,16 @@ main = defaultMain
   , bench "128x128 ()"     $ nf (\x -> multiplyWith const (Heap.streamHeapWith const) x x) blockUnit128
   ]
 
-blockInt :: Mat U.Vector Int
+blockInt :: Mat Int
 blockInt = M.fromList $ Prelude.zip (Key <$> [0..31] <*> [0..31]) (repeat 1)
 
-blockInt128 :: Mat U.Vector Int
+blockInt128 :: Mat Int
 blockInt128 = M.fromList $ Prelude.zip (Key <$> [0..127] <*> [0..127]) (repeat 1)
 
-blockUnit :: Mat U.Vector ()
+blockUnit :: Mat ()
 blockUnit = M.fromList $ Prelude.zip (Key <$> [0..31] <*> [0..31]) (repeat ())
 
-blockUnit128 :: Mat U.Vector ()
+blockUnit128 :: Mat ()
 blockUnit128 = M.fromList $ Prelude.zip (Key <$> [0..127] <*> [0..127]) (repeat ())
 
 mmul :: UArray (Int,Int) Int -> UArray (Int,Int) Int -> UArray (Int,Int) Int
