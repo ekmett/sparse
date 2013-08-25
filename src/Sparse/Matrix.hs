@@ -70,7 +70,7 @@ import Data.Word
 import Prelude hiding (head, last, null)
 import Sparse.Matrix.Internal.Fusion as Fusion
 import Sparse.Matrix.Internal.Key
-import Sparse.Matrix.Internal.Vectored
+import Sparse.Matrix.Internal.Vectored as I
 import Sparse.Matrix.Internal.Heap as Heap hiding (head)
 import Text.Read
 
@@ -150,13 +150,13 @@ instance (RealFloat a, Eq0 a) => Eq0 (Complex a) where
 -- * Sparse Matrices
 
 -- invariant: all vectors are the same length
-data Mat a = Mat {-# UNPACK #-} !Int !(U.Vector Word) !(U.Vector Word) !(Vec a a)
+data Mat a = Mat {-# UNPACK #-} !Int !(U.Vector Word) !(U.Vector Word) !(I.Vector a)
  --  deriving (Eq,Ord)
 
-deriving instance (Vectored a, Eq (Vec a a)) => Eq (Mat a)
+deriving instance (Vectored a, Eq (I.Vector a)) => Eq (Mat a)
 -- Mat n xs ys vs == Mat n' xs' ys' vs' = n == n' && xs == xs' && ys == ys' && vs == vs'
 
-deriving instance (Vectored a, Ord (Vec a a)) => Ord (Mat a)
+deriving instance (Vectored a, Ord (I.Vector a)) => Ord (Mat a)
 
 instance (Vectored a, Show a) => Show (Mat a) where
   showsPrec d m = G.showsPrec d (m^._Mat)
@@ -164,7 +164,7 @@ instance (Vectored a, Show a) => Show (Mat a) where
 instance (Vectored a, Read a) => Read (Mat a) where
   readPrec = (_Mat #) <$> G.readPrec
 
-instance NFData (Vec a a) => NFData (Mat a) where
+instance NFData (I.Vector a) => NFData (Mat a) where
   rnf (Mat _ xs ys vs) = rnf xs `seq` rnf ys `seq` rnf vs `seq` ()
 
 -- | bundle up the matrix in a form suitable for vector-algorithms
@@ -179,7 +179,7 @@ keys f (Mat n xs ys vs) = f (V_Key n xs ys) <&> \ (V_Key n' xs' ys') -> Mat n' x
 {-# INLINE keys #-}
 
 -- | Access the keys of a matrix
-values :: Lens (Mat a) (Mat b) (Vec a a) (Vec b b)
+values :: Lens (Mat a) (Mat b) (I.Vector a) (I.Vector b)
 values f (Mat n xs ys vs) = Mat n xs ys <$> f vs
 {-# INLINE values #-}
 
