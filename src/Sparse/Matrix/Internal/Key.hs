@@ -44,10 +44,9 @@ import Data.Word
 
 -- * Morton Order
 
--- | @key i j@ interleaves the bits of the keys @i@ and @j@.
---
--- Keys are then just values sorted in \"Morton Order\".
-data Key = Key {-# UNPACK #-} !Word32 {-# UNPACK #-} !Word32
+-- | @Key i j@ logically orders the keys as if the bits of the keys @i@ and @j@
+-- were interleaved. This is equivalent to storing the keys in \"Morton Order\".
+data Key = Key {-# UNPACK #-} !Word {-# UNPACK #-} !Word
   deriving (Show, Read, Eq)
 
 instance Ord Key where
@@ -55,18 +54,18 @@ instance Ord Key where
     | xor a c `lts` xor b d = compare b d
     | otherwise             = compare a c
 
-instance (a ~ Word32, b ~ Word32) => Field1 Key Key a b where
+instance (a ~ Word, b ~ Word) => Field1 Key Key a b where
   _1 f (Key i j) = indexed f (0 :: Int) i <&> (Key ?? j)
   {-# INLINE _1 #-}
 
-instance (a ~ Word32, b ~ Word32) => Field2 Key Key a b where
+instance (a ~ Word, b ~ Word) => Field2 Key Key a b where
   _2 f (Key i j) = indexed f (1 :: Int) j <&> Key i
   {-# INLINE _2 #-}
 
 instance U.Unbox Key
 
-data instance U.MVector s Key = MV_Key {-# UNPACK #-} !Int !(U.MVector s Word32) !(U.MVector s Word32)
-data instance U.Vector    Key = V_Key  {-# UNPACK #-} !Int !(U.Vector Word32) !(U.Vector Word32)
+data instance U.MVector s Key = MV_Key {-# UNPACK #-} !Int !(U.MVector s Word) !(U.MVector s Word)
+data instance U.Vector    Key = V_Key  {-# UNPACK #-} !Int !(U.Vector Word) !(U.Vector Word)
 
 instance GM.MVector U.MVector Key where
   {-# INLINE basicLength #-}
@@ -106,36 +105,37 @@ instance G.Vector U.Vector Key where
   basicUnsafeSlice i n (V_Key _ u v)             = V_Key n (G.basicUnsafeSlice i n u) (G.basicUnsafeSlice i n v)
   basicUnsafeIndexM (V_Key _ u v) i              = liftM2 Key (G.basicUnsafeIndexM u i) (G.basicUnsafeIndexM v i)
   basicUnsafeCopy (MV_Key _ mu mv) (V_Key _ u v) = G.basicUnsafeCopy mu u >> G.basicUnsafeCopy mv v
-  elemseq _ (Key x y) z = G.elemseq (undefined :: U.Vector Word32) x
-                        $ G.elemseq (undefined :: U.Vector Word32) y z
+  elemseq _ (Key x y) z = G.elemseq (undefined :: U.Vector Word) x
+                        $ G.elemseq (undefined :: U.Vector Word) y z
 
-compares :: Word32 -> Word32 -> Ordering
+-- | compare the position of the most significant bit of two words
+compares :: Word -> Word -> Ordering
 compares a b = case compare a b of
   LT | a < xor a b -> LT
   GT | b < xor a b -> GT
   _ -> EQ
 {-# INLINE compares #-}
 
-lts :: Word32 -> Word32 -> Bool
+lts :: Word -> Word -> Bool
 lts a b = a < b && a < xor a b
 {-# INLINE lts #-}
 
-les :: Word32 -> Word32 -> Bool
+les :: Word -> Word -> Bool
 les a b = a <= b || xor a b <= b
 {-# INLINE les #-}
 
-eqs :: Word32 -> Word32 -> Bool
+eqs :: Word -> Word -> Bool
 eqs a b = compares a b == EQ
 {-# INLINE eqs #-}
 
-nes :: Word32 -> Word32 -> Bool
+nes :: Word -> Word -> Bool
 nes a b = compares a b /= EQ
 {-# INLINE nes #-}
 
-gts :: Word32 -> Word32 -> Bool
+gts :: Word -> Word -> Bool
 gts a b = a > b && xor a b > b
 {-# INLINE gts #-}
 
-ges :: Word32 -> Word32 -> Bool
+ges :: Word -> Word -> Bool
 ges a b = a >= b || a >= xor a b
 {-# INLINE ges #-}

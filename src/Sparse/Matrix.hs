@@ -106,7 +106,7 @@ instance (RealFloat a, Eq0 a) => Eq0 (Complex a) where
 -- * Sparse Matrices
 
 -- invariant: all vectors are the same length
-data Mat v a = Mat {-# UNPACK #-} !Int !(U.Vector Word32) !(U.Vector Word32) !(v a)
+data Mat v a = Mat {-# UNPACK #-} !Int !(U.Vector Word) !(U.Vector Word) !(v a)
   deriving (Show, Read, Eq,Ord)
 
 instance NFData (v a) => NFData (Mat v a) where
@@ -238,7 +238,7 @@ search p = go where
     where m = l + div (h-l) 2
 {-# INLINE search #-}
 
-split1 :: G.Vector v a => Word32 -> Word32 -> Mat v a -> (Mat v a, Mat v a)
+split1 :: G.Vector v a => Word -> Word -> Mat v a -> (Mat v a, Mat v a)
 split1 ai bi (Mat n xs ys vs) = (m0,m1)
   where
     !aibi = xor ai bi
@@ -250,7 +250,7 @@ split1 ai bi (Mat n xs ys vs) = (m0,m1)
     !m1 = Mat (n-k) xs1 ys1 vs1
 {-# INLINE split1 #-}
 
-split2 :: G.Vector v a => Word32 -> Word32 -> Mat v a -> (Mat v a, Mat v a)
+split2 :: G.Vector v a => Word -> Word -> Mat v a -> (Mat v a, Mat v a)
 split2 aj bj (Mat n xs ys vs) = (m0,m1)
   where
     !ajbj = xor aj bj
