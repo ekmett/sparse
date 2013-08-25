@@ -11,7 +11,7 @@
 -- Stability   :  experimental
 -- Portability :  non-portable
 --
--- Bootstrapped catenable non-empty pairing heaps as described in
+-- Bootstrapped /catenable/ non-empty pairing heaps as described in
 --
 -- <https://www.fpcomplete.com/user/edwardk/revisiting-matrix-multiplication/part-5>
 -----------------------------------------------------------------------------
@@ -40,7 +40,7 @@ import Data.Vector.Fusion.Util
 import Sparse.Matrix.Internal.Key
 import Prelude hiding (head, tail)
 
--- | Bootstrapped _catenable_ non-empty pairing heaps
+-- | Bootstrapped catenable non-empty pairing heaps
 data Heap a = Heap {-# UNPACK #-} !Key a [Heap a] [Heap a] [Heap a]
   deriving (Show,Read)
 
