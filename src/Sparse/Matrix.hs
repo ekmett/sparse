@@ -80,13 +80,13 @@ class Num a => Eq0 a where
   isZero = (0 ==)
   {-# INLINE isZero #-}
 #endif
-  add :: G.Vector v a => Mat v a -> Mat v a -> Mat v a
-  add = addWith0 $ nonZero (+)
-  {-# INLINE add #-}
+  addMats :: G.Vector v a => Mat v a -> Mat v a -> Mat v a
+  addMats = addWith0 $ nonZero (+)
+  {-# INLINE addMats #-}
 
-  sub :: G.Vector v a => Mat v a -> Mat v a -> Mat v a
-  sub = addWith0 $ nonZero (-)
-  {-# INLINE sub #-}
+  subMats :: G.Vector v a => Mat v a -> Mat v a -> Mat v a
+  subMats = addWith0 $ nonZero (-)
+  {-# INLINE subMats #-}
 
   addHeap :: Maybe (Heap a) -> Stream (Key, a)
   addHeap = Heap.streamHeapWith0 $ nonZero (+)
@@ -209,9 +209,9 @@ instance (G.Vector v a, Num a, Eq0 a) => Num (Mat v a) where
   fromInteger 0 = empty
   fromInteger _ = error "Mat: fromInteger n"
   {-# INLINE fromInteger #-}
-  (+) = add
+  (+) = addMats
   {-# INLINE (+) #-}
-  (-) = sub
+  (-) = subMats
   {-# INLINE (-) #-}
   (*) = multiplyWith (*) addHeap
   {-# INLINEABLE (*) #-}
