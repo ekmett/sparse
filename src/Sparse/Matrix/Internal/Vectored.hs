@@ -7,25 +7,28 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 module Sparse.Matrix.Internal.Vectored
   ( Vectored(..)
+  , Vector
   -- * Internals
-  , V_Complex(..)
-  , MV_Complex(..)
+  , V_Complex(V_Complex)
+  , MV_Complex(MV_Complex)
   ) where
 
 import Control.Monad
 import Data.Complex
 import Data.Int
 import Data.Monoid
-import Data.Vector.Generic as G
-import Data.Vector.Generic.Mutable as GM
-import Data.Vector.Unboxed as U hiding (MV_Complex, V_Complex)
-import Data.Vector.Fusion.Stream as Stream
-import Data.Vector as B
+import qualified Data.Vector.Generic as G
+import qualified Data.Vector.Generic.Mutable as GM
+import qualified Data.Vector.Unboxed as U
+import qualified Data.Vector.Fusion.Stream as Stream
+import qualified Data.Vector as B
 import Data.Word
-import Sparse.Matrix.Internal.Key
+import qualified Sparse.Matrix.Internal.Key as Key
 import Text.Read
 
 -- * Data types that know how to store themselves in a Vector optimally, maximizing the level of unboxing provided.
+
+type Vector a = Vec a a
 
 class (G.Vector (Vec a) a, Monoid (Vec a a)) => Vectored a where
   type Vec a :: * -> *
@@ -41,7 +44,7 @@ instance Vectored Int8
 instance Vectored Int16
 instance Vectored Int32
 instance Vectored Int64
-instance Vectored Key
+instance Vectored Key.Key
 instance Vectored Word
 instance Vectored Word8
 instance Vectored Word16
@@ -56,12 +59,12 @@ instance Vectored Integer where
 -- * Complex numbers are boxed or unboxed based on their components
 
 data MV_Complex :: * -> * -> * where
-  MV_Complex :: {-# UNPACK #-} !Int -> !(Mutable (Vec a) s a) -> !(Mutable (Vec a) s a) -> MV_Complex s (Complex a)
+  MV_Complex :: {-# UNPACK #-} !Int -> !(G.Mutable (Vec a) s a) -> !(G.Mutable (Vec a) s a) -> MV_Complex s (Complex a)
 
 data V_Complex :: * -> * where
   V_Complex :: {-# UNPACK #-} !Int -> !(Vec a a) -> !(Vec a a) -> V_Complex (Complex a)
 
-type instance Mutable V_Complex = MV_Complex
+type instance G.Mutable V_Complex = MV_Complex
 
 instance (Vectored a, RealFloat a) => GM.MVector MV_Complex (Complex a) where
   {-# INLINE basicLength #-}
