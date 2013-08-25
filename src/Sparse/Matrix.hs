@@ -41,7 +41,7 @@ module Sparse.Matrix
   , Eq0(..)
   -- * Customization
   , addWith
-  --, multiplyWith
+  , multiplyWith
   , nonZero
   -- * Lenses
   , _Mat, keys, values
