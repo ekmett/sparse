@@ -242,7 +242,7 @@ split1 :: G.Vector v a => Word32 -> Word32 -> Mat v a -> (Mat v a, Mat v a)
 split1 ai bi (Mat n xs ys vs) = (m0,m1)
   where
     !aibi = xor ai bi
-    !k    = search (\l -> xor (xs U.! l) bi `les` aibi) 0 n
+    !k    = search (\l -> xor (xs U.! l) bi `lts` aibi) 0 n
     (xs0,xs1) = U.splitAt k xs
     (ys0,ys1) = U.splitAt k ys
     (vs0,vs1) = G.splitAt k vs
@@ -254,7 +254,7 @@ split2 :: G.Vector v a => Word32 -> Word32 -> Mat v a -> (Mat v a, Mat v a)
 split2 aj bj (Mat n xs ys vs) = (m0,m1)
   where
     !ajbj = xor aj bj
-    !k    = search (\l -> xor (ys U.! l) bj `les` ajbj) 0 n
+    !k    = search (\l -> xor (ys U.! l) bj `lts` ajbj) 0 n
     (xs0,xs1) = U.splitAt k xs
     (ys0,ys1) = U.splitAt k ys
     (vs0,vs1) = G.splitAt k vs
