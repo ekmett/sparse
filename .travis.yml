@@ -1,15 +1,18 @@
 language: haskell
 before_install:
+  - sudo apt-get update -qq
+  - sudo apt-get install -qq haskell-platform-doc
   # Uncomment whenever hackage is down.
   # - mkdir -p ~/.cabal && cp travis/config ~/.cabal/config && cabal update
   - cabal update
 
   # Try installing some of the build-deps with apt-get for speed.
-  - travis/cabal-apt-install $mode --force-reinstalls
+  - travis/cabal-apt-install $mode --force-reinstalls --enable-documentation
 
 install:
   - cabal configure -flib-Werror $mode
   - cabal build
+  - cabal install --enable-documentation
 
 script:
   - $script
