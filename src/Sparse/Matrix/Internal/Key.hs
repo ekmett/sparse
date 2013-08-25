@@ -127,7 +127,7 @@ instance G.Vector U.Vector Key where
 -- >>> Key 100 200
 -- Key 200 100
 swap :: Key -> Key
-swap (Key i j) = Key i j
+swap (Key i j) = Key j i
 {-# INLINE swap #-}
 
 -- | compare the position of the most significant bit of two words
