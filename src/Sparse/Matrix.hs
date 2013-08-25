@@ -76,20 +76,51 @@ import Control.DeepSeq
 -- * Distinguishable Zero
 
 class Num a => Eq0 a where
+  -- | Return whether or not the element is 0.
+  --
+  -- It may be okay to never return 'True', but you won't be
+  -- able to thin spurious zeroes introduced into your matrix.
+  --
   isZero :: a -> Bool
 #ifndef HLINT
   default isZero :: (Num a, Eq a) => a -> Bool
   isZero = (0 ==)
   {-# INLINE isZero #-}
 #endif
+  -- |
+  -- Add two matrices. By default this assumes 'isZero' can
+  -- possibly return 'True' after an addition. For some
+  -- ring-like structures, this doesn't hold. There you can
+  -- use:
+  --
+  -- @
+  -- 'addMats' = 'addWith' ('+')
+  -- @
   addMats :: G.Vector v a => Mat v a -> Mat v a -> Mat v a
   addMats = addWith0 $ nonZero (+)
   {-# INLINE addMats #-}
 
+  -- |
+  -- Subtract two matrices. By default this assumes 'isZero' can
+  -- possibly return 'True' after a subtraction.
   subMats :: G.Vector v a => Mat v a -> Mat v a -> Mat v a
   subMats = addWith0 $ nonZero (-)
   {-# INLINE subMats #-}
 
+  -- | Convert from a 'Heap' to a 'Stream'.
+  --
+  -- If addition of non-zero valus in your ring-like structure
+  -- cannot yield zero, then you can use
+  --
+  -- @
+  -- addHeap = Heap.streamHeapWith (+)
+  -- @
+  --
+  -- instead of the default definition
+  --
+  -- @
+  -- addHeap = Heap.streamHeapWith0 $ nonZero (+)
+  -- @
   addHeap :: Maybe (Heap a) -> Stream (Key, a)
   addHeap = Heap.streamHeapWith0 $ nonZero (+)
 

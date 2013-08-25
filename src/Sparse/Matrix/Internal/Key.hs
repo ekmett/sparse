@@ -124,7 +124,7 @@ instance G.Vector U.Vector Key where
 
 -- | Swaps the key components around
 --
--- >>> Key 100 200
+-- >>> swap (Key 100 200)
 -- Key 200 100
 swap :: Key -> Key
 swap (Key i j) = Key j i
