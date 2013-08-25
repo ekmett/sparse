@@ -7,7 +7,7 @@ before_install:
   - cabal update
 
   # Try installing some of the build-deps with apt-get for speed.
-  - travis/cabal-apt-install $mode --force-reinstalls --enable-documentation
+  - travis/cabal-apt-install $mode --force-reinstalls
 
 install:
   - cabal configure -flib-Werror $mode
