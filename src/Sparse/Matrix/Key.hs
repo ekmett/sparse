@@ -53,10 +53,8 @@ data Key = Key {-# UNPACK #-} !Word32 {-# UNPACK #-} !Word32
 
 instance Ord Key where
   Key a b `compare` Key c d
-    | ab < cd && ab < xor ab cd = compare b d
-    | otherwise = compare a c
-    where ab = xor a b
-          cd = xor c d
+    | xor a c `lts` xor b d = compare b d
+    | otherwise             = compare a c
 
 instance (a ~ Word32, b ~ Word32) => Field1 Key Key a b where
   _1 f (Key i j) = indexed f (0 :: Int) i <&> (Key ?? j)
