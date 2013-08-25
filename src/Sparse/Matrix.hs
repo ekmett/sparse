@@ -36,7 +36,7 @@ module Sparse.Matrix
   , ident
   , empty
   -- * Consumption
-  , count
+  , size
   -- * Distinguishable Zero
   , Eq0(..)
   -- * Customization
@@ -191,9 +191,9 @@ empty = Mat 0 U.empty U.empty G.empty
 -- * Consumption
 
 -- | Count the number of non-zero entries in the matrix
-count :: Mat v a -> Int
-count (Mat n _ _ _) = n
-{-# INLINE count #-}
+size :: Mat v a -> Int
+size (Mat n _ _ _) = n
+{-# INLINE size #-}
 
 instance (G.Vector v a, Num a, Eq0 a) => Num (Mat v a) where
   {-# SPECIALIZE instance (Num a, Eq0 a) => Num (Mat V.Vector a) #-}
@@ -276,38 +276,38 @@ addWith0 f xs ys = _Mat # G.unstream (mergeStreamsWith0 f (G.stream (xs^._Mat)) 
 -- | Multiply two matrices using the specified multiplication and addition operation.
 multiplyWith :: G.Vector v a => (a -> a -> a) -> (Maybe (Heap a) -> Stream (Key, a)) -> Mat v a -> Mat v a -> Mat v a
 {-# INLINEABLE multiplyWith #-}
-multiplyWith times make x0 y0 = case compare (count x0) 1 of
+multiplyWith times make x0 y0 = case compare (size x0) 1 of
   LT -> empty
-  EQ | count y0 == 1 -> _Mat # (G.unstream $ hint $ make $ go11 (lo x0) (head x0) (lo y0) (head y0))
+  EQ | size y0 == 1 -> _Mat # (G.unstream $ hint $ make $ go11 (lo x0) (head x0) (lo y0) (head y0))
      | otherwise     -> _Mat # (G.unstream $ hint $ make $ go12 (lo x0) (head x0) (lo y0) y0 (hi y0))
-  GT -> case compare (count y0) 1 of
+  GT -> case compare (size y0) 1 of
       LT -> empty
       EQ -> _Mat # (G.unstream $ hint $ make $ go21 (lo x0) x0 (hi x0) (lo y0) (head y0))
       GT -> _Mat # (G.unstream $ hint $ make $ go22 (lo x0) x0 (hi x0) (lo y0) y0 (hi y0))
   where
-    hint x = sized x $ Max (count x0 * count y0)
+    hint x = sized x $ Max (size x0 * size y0)
     go11 (Key i j) a (Key j' k) b
        | j == j' = Just $ Heap.singleton (Key i k) (times a b)
        | otherwise = Nothing
 
     -- internal cases in go22
     go22L0 xa x ya y yb
-      | count x == 1 = go12 xa (head x) ya y yb
+      | size x == 1 = go12 xa (head x) ya y yb
       | otherwise    = go22 xa x (hi x) ya y yb
     {-# INLINE go22L0 #-}
 
     go22L1 x xb ya y yb
-      | count x == 1 = go12 xb (head x) ya y yb
+      | size x == 1 = go12 xb (head x) ya y yb
       | otherwise    = go22 (lo x) x xb ya y yb
     {-# INLINE go22L1 #-}
 
     go22R0 xa x xb ya y
-      | count y == 1 = go21 xa x xb ya (head y)
+      | size y == 1 = go21 xa x xb ya (head y)
       | otherwise    = go22 xa x xb ya y (hi y)
     {-# INLINE go22R0 #-}
 
     go22R1 xa x xb y yb
-      | count y == 1 = go21 xa x xb yb (head y)
+      | size y == 1 = go21 xa x xb yb (head y)
       | otherwise    = go22 xa x xb (lo y) y yb
     {-# INLINE go22R1 #-}
 
