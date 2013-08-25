@@ -30,7 +30,6 @@ module Sparse.Matrix
     Mat(..)
   -- * Keys
   , Key
-  , key, shuffled, unshuffled
   -- * Construction
   , Sparse.Matrix.fromList
   , Sparse.Matrix.singleton
@@ -42,7 +41,7 @@ module Sparse.Matrix
   , Eq0(..)
   -- * Customization
   , addWith
-  , multiplyWith
+  --, multiplyWith
   , nonZero
   -- * Lenses
   , _Mat, keys, values
@@ -106,31 +105,27 @@ instance (RealFloat a, Eq0 a) => Eq0 (Complex a) where
 
 -- * Sparse Matrices
 
-newtype Mat v a = Mat { runMat :: H.Vector U.Vector v (Key, a) }
-  deriving (Eq,Ord)
-
-instance (G.Vector v a, Show a) => Show (Mat v a) where
-  showsPrec d (Mat v) = showsPrec d v
-
-instance (G.Vector v a, Read a) => Read (Mat v a) where
-  readsPrec d r = [ (Mat m, t) | (m, t) <- readsPrec d r ]
+-- invariant: all vectors are the same length
+data Mat v a = Mat {-# UNPACK #-} !Int !(U.Vector Word32) !(U.Vector Word32) !(v a)
+  deriving (Show, Read, Eq,Ord)
 
 instance NFData (v a) => NFData (Mat v a) where
-  rnf (Mat (H.V ks vs)) = rnf ks `seq` rnf vs `seq` ()
+  rnf (Mat _ xs ys vs) = rnf xs `seq` rnf ys `seq` rnf vs `seq` ()
 
--- | This isomorphism lets you access the internal structure of a matrix
+-- | bundle up the matrix in a form suitable for vector-algorithms
 _Mat :: Iso (Mat u a) (Mat v b) (H.Vector U.Vector u (Key, a)) (H.Vector U.Vector v (Key, b))
-_Mat = iso runMat Mat
+_Mat = iso (\(Mat n xs ys vs) -> H.V (V_Key n xs ys) vs)
+           (\(H.V (V_Key n xs ys) vs) -> Mat n xs ys vs)
 {-# INLINE _Mat #-}
 
 -- | Access the keys of a matrix
 keys :: Lens' (Mat v a) (U.Vector Key)
-keys f = _Mat $ \ (H.V ks vs) -> f ks <&> \ks' -> H.V ks' vs
+keys f (Mat n xs ys vs) = f (V_Key n xs ys) <&> \ (V_Key n' xs' ys') -> Mat n' xs' ys' vs
 {-# INLINE keys #-}
 
 -- | Access the keys of a matrix
 values :: Lens (Mat u a) (Mat v b) (u a) (v b)
-values f = _Mat $ \ (H.V ks vs) -> f vs <&> \vs' -> H.V ks vs'
+values f (Mat n xs ys vs) = Mat n xs ys <$> f vs
 {-# INLINE values #-}
 
 instance Functor v => Functor (Mat v) where
@@ -148,21 +143,26 @@ instance Traversable v => Traversable (Mat v) where
 type instance IxValue (Mat v a) = a
 type instance Index (Mat v a) = Key
 
+-- traverse a Vector
+eachV :: (Applicative f, G.Vector v a, G.Vector v b) => (a -> f b) -> v a -> f (v b)
+eachV f v = G.fromListN (G.length v) <$> traverse f (G.toList v)
+
 instance (Applicative f, G.Vector v a, G.Vector v b) => Each f (Mat v a) (Mat v b) a b where
-  each f (Mat v@(H.V ks _)) = Mat . H.V ks . G.fromListN (G.length v) <$> traverse f' (G.toList v) where
-    f' = uncurry (indexed f)
+  each f = _Mat $ eachV $ \(k,v) -> (,) k <$> indexed f k v
   {-# INLINE each #-}
 
 instance (Functor f, Contravariant f, G.Vector v a) => Contains f (Mat v a) where
   contains = containsIx
 
 instance (Applicative f, G.Vector v a) => Ixed f (Mat v a) where
-  ix i f m@(Mat (H.V ks vs))
-    | Just j <- ks U.!? l, i == j = indexed f i (vs G.! l) <&> \v -> Mat (H.V ks (vs G.// [(l,v)]))
-    | otherwise                   = pure m
-    where l = search (\j -> (ks U.! j) >= i) 0 (U.length ks)
+  ix ij@(Key i j) f m@(Mat n xs ys vs)
+    | Just i' <- xs U.!? l, i == i'
+    , Just j' <- ys U.!? l, j == j' = indexed f ij (vs G.! l) <&> \v -> Mat n xs ys (vs G.// [(l,v)])
+    | otherwise = pure m
+    where l = search (\k -> Key (xs U.! k) (ys U.! k) >= ij) 0 n
   {-# INLINE ix #-}
 
+{-
 instance G.Vector v a => At (Mat v a) where
   at i f (Mat kvs@(H.V ks vs)) = case ks U.!? l of
     Just j
@@ -176,38 +176,39 @@ instance G.Vector v a => At (Mat v a) where
         Nothing -> Mat kvs
     where l = search (\j -> (ks U.! j) >= i) 0 (U.length ks)
   {-# INLINE at #-}
+-}
 
 instance (G.Vector v a, Num a, Eq0 a) => Eq0 (Mat v a) where
-  isZero = H.null . runMat
+  isZero (Mat n _ _ _) = n == 0
   {-# INLINE isZero #-}
 
 -- * Construction
 
 -- | Build a sparse matrix.
 fromList :: G.Vector v a => [(Key, a)] -> Mat v a
-fromList xs = Mat $ H.modify (Sort.sortBy (compare `on` fst)) $ H.fromList xs
+fromList xs = _Mat # H.modify (Sort.sortBy (compare `on` fst)) (H.fromList xs)
 {-# INLINABLE fromList #-}
 
 -- | @singleton@ makes a matrix with a singleton value at a given location
 singleton :: G.Vector v a => Key -> a -> Mat v a
-singleton k v = Mat $ H.singleton (k,v)
+singleton k v = _Mat # H.singleton (k,v)
 {-# INLINE singleton #-}
 
 -- | @ident n@ makes an @n@ x @n@ identity matrix
-ident :: (G.Vector v a, Num a) => Word32 -> Mat v a
-ident w = Mat $ H.generate (fromIntegral w) $ \i -> let i' = fromIntegral i in (key i' i', 1)
+ident :: (G.Vector v a, Num a) => Int -> Mat v a
+ident w = Mat w (U.generate w fromIntegral) (U.generate w fromIntegral) (G.replicate w 1)
 {-# INLINE ident #-}
 
 -- | The empty matrix
 empty :: G.Vector v a => Mat v a
-empty = empty
+empty = Mat 0 U.empty U.empty G.empty
 {-# INLINE empty #-}
 
 -- * Consumption
 
 -- | Count the number of non-zero entries in the matrix
 count :: Mat v a -> Int
-count = H.length . runMat
+count (Mat n _ _ _) = n
 {-# INLINE count #-}
 
 instance (G.Vector v a, Num a, Eq0 a) => Num (Mat v a) where
@@ -253,71 +254,57 @@ search p = go where
     where m = l + div (h-l) 2
 {-# INLINE search #-}
 
--- | @smear x@ finds the smallest @2^n-1 >= x@
-smear :: Word64 -> Word64
-smear k0 = k6 where
-  k1 = k0 .|. unsafeShiftR k0 1
-  k2 = k1 .|. unsafeShiftR k1 2
-  k3 = k2 .|. unsafeShiftR k2 4
-  k4 = k3 .|. unsafeShiftR k3 8
-  k5 = k4 .|. unsafeShiftR k4 16
-  k6 = k5 .|. unsafeShiftR k5 32
-{-# INLINE smear #-}
-
--- | Determine the parity of
-parity :: Word64 -> Bool
-parity k0 = testBit k6 0 where
-  k1 = k0 `xor` unsafeShiftR k0 1
-  k2 = k1 `xor` unsafeShiftR k1 2
-  k3 = k2 `xor` unsafeShiftR k2 4
-  k4 = k3 `xor` unsafeShiftR k3 8
-  k5 = k4 `xor` unsafeShiftR k4 16
-  k6 = k5 `xor` unsafeShiftR k5 32
-{-# INLINE parity #-}
-
--- | partition along the critical bit into a 2-fat component and the remainder.
---
--- Note: the keys have 'junk' on the top of the keys, but it should be exactly the junk we need them to have when we rejoin the quadrants
---       or reassemble a key from matrix multiplication!
-split :: G.Vector v a => Word64 -> Mat v a -> (Mat v a, Mat v a)
-split crit (Mat h@(H.V ks _)) = (Mat m0, Mat m1)
+split1 :: G.Vector v a => Word32 -> Word32 -> Mat v a -> (Mat v a, Mat v a)
+split1 ai bi (Mat n xs ys vs) = (m0,m1)
   where
-    !n = U.length ks
-    !k = search (\i -> runKey (ks U.! i) .&. crit /= 0) 0 n
-    (m0,m1) = H.splitAt k h
-{-# INLINE split #-}
+    !aibi = xor ai bi
+    !k    = search (\l -> xor (xs U.! l) bi `les` aibi) 0 n
+    (xs0,xs1) = U.splitAt k xs
+    (ys0,ys1) = U.splitAt k ys
+    (vs0,vs1) = G.splitAt k vs
+    !m0 = Mat k     xs0 ys0 vs0
+    !m1 = Mat (n-k) xs1 ys1 vs1
+{-# INLINE split1 #-}
+
+split2 :: G.Vector v a => Word32 -> Word32 -> Mat v a -> (Mat v a, Mat v a)
+split2 aj bj (Mat n xs ys vs) = (m0,m1)
+  where
+    !ajbj = xor aj bj
+    !k    = search (\l -> xor (ys U.! l) bj `les` ajbj) 0 n
+    (xs0,xs1) = U.splitAt k xs
+    (ys0,ys1) = U.splitAt k ys
+    (vs0,vs1) = G.splitAt k vs
+    !m0 = Mat k     xs0 ys0 vs0
+    !m1 = Mat (n-k) xs1 ys1 vs1
+{-# INLINE split2 #-}
 
 -- | Merge two matrices where the indices coincide into a new matrix. This provides for generalized
 -- addition. Return 'Nothing' for zero.
 --
 addWith :: G.Vector v a => (a -> a -> a) -> Mat v a -> Mat v a -> Mat v a
-addWith f xs ys = Mat (G.unstream (mergeStreamsWith f (G.stream (runMat xs)) (G.stream (runMat ys))))
+addWith f xs ys = _Mat # G.unstream (mergeStreamsWith f (G.stream (xs^._Mat)) (G.stream (ys^._Mat)))
 {-# INLINE addWith #-}
 
 addWith0 :: G.Vector v a => (a -> a -> Maybe a) -> Mat v a -> Mat v a -> Mat v a
-addWith0 f xs ys = Mat (G.unstream (mergeStreamsWith0 f (G.stream (runMat xs)) (G.stream (runMat ys))))
+addWith0 f xs ys = _Mat # G.unstream (mergeStreamsWith0 f (G.stream (xs^._Mat)) (G.stream (ys^._Mat)))
 {-# INLINE addWith0 #-}
-
-mask1,mask2 :: Word64
-mask1 = 0xAAAAAAAAAAAAAAAA -- i
-mask2 = 0x5555555555555555 -- j
 
 -- | Multiply two matrices using the specified multiplication and addition operation.
 multiplyWith :: G.Vector v a => (a -> a -> a) -> (Maybe (Heap a) -> Stream (Key, a)) -> Mat v a -> Mat v a -> Mat v a
 {-# INLINEABLE multiplyWith #-}
 multiplyWith times make x0 y0 = case compare (count x0) 1 of
   LT -> empty
-  EQ | count y0 == 1 -> Mat $ G.unstream $ hint $ make $ go11 (lo x0) (head x0) (lo y0) (head y0)
-     | otherwise     -> Mat $ G.unstream $ hint $ make $ go12 (lo x0) (head x0) (lo y0) y0 (hi y0)
+  EQ | count y0 == 1 -> _Mat # (G.unstream $ hint $ make $ go11 (lo x0) (head x0) (lo y0) (head y0))
+     | otherwise     -> _Mat # (G.unstream $ hint $ make $ go12 (lo x0) (head x0) (lo y0) y0 (hi y0))
   GT -> case compare (count y0) 1 of
       LT -> empty
-      EQ -> Mat $ G.unstream $ hint $ make $ go21 (lo x0) x0 (hi x0) (lo y0) (head y0)
-      GT -> Mat $ G.unstream $ hint $ make $ go22 (lo x0) x0 (hi x0) (lo y0) y0 (hi y0)
+      EQ -> _Mat # (G.unstream $ hint $ make $ go21 (lo x0) x0 (hi x0) (lo y0) (head y0))
+      GT -> _Mat # (G.unstream $ hint $ make $ go22 (lo x0) x0 (hi x0) (lo y0) y0 (hi y0))
   where
     hint x = sized x $ Max (count x0 * count y0)
-    go11 xa a yb b
-       | unsafeShiftL (xa .&. mask2) 1 /= (yb .&. mask1) = Nothing
-       | otherwise = Just $ Heap.singleton (Key (xa .&. mask1 .|. yb .&. mask2)) (times a b)
+    go11 (Key i j) a (Key j' k) b
+       | j == j' = Just $ Heap.singleton (Key i k) (times a b)
+       | otherwise = Nothing
 
     -- internal cases in go22
     go22L0 xa x ya y yb
@@ -340,27 +327,23 @@ multiplyWith times make x0 y0 = case compare (count x0) 1 of
       | otherwise    = go22 xa x xb (lo y) y yb
     {-# INLINE go22R1 #-}
 
-    -- x and y have at lo 2 non-zero elements each
-    go22 xa x xb ya y yb
-      | cm <- complement quadrantMask
-      , unsafeShiftL (cm .&. mask2 .&. xa) 1 /= cm .&. mask1 .&. yb = Nothing  -- we disagree on the joining index, so short circuit
-      | mx .&. crit /= 0 = case split crit x of -- then this is the most significant difference
-        (m0,m1) | oddity      -> go22L0 xa m0 ya y yb `madd` go22L1 m1 xb ya y yb -- we split on j so we have to merge
-                | otherwise   -> go22L0 xa m0 ya y yb `mfby` go22L1 m1 xb ya y yb -- we split on i so we can concatenate
-      | otherwise = case split crit y of        -- then this is the most significant
-        (m0,m1) | oddity      -> go22R0 xa x xb ya m0 `mfby` go22R1 xa x xb m1 yb -- we split on k so we can concatenate
-                | otherwise   -> go22R0 xa x xb ya m0 `madd` go22R1 xa x xb m1 yb -- we split on j so we have to merge
+    -- x and y have at least 2 non-zero elements each
+    go22 xa@(Key xai xaj) x xb@(Key xbi xbj) ya@(Key yaj yak) y yb@(Key ybj ybk)
+      | gts (xor xaj yaj) (xiyj.|.ykxj) = Nothing
+      | ges xiyj ykxj
+      = if ges xi yj then case split1 xai xbi x of (m0,m1) -> go22L0 xa m0 ya y yb `mfby` go22L1 m1 xb ya y yb -- we can split on i, fby
+                     else case split1 yaj ybj y of (m0,m1) -> go22R0 xa x xb ya m0 `madd` go22R1 xa x xb m1 yb -- we split on j, mix
+      | ges yk xj = case split2 yak ybk y of (m0,m1) -> go22R0 xa x xb ya m0 `mfby` go22R1 xa x xb m1 yb -- we can split on k, fby
+      | otherwise = case split2 xaj xbj x of (m0,m1) -> go22L0 xa m0 ya y yb `madd` go22L1 m1 xb ya y yb -- we split on j, mix
       where
-        mx     = xor xa xb
-        mask   = smear (mx .|. xor ya yb)
-        oddity = parity mask
-        quadrantMask -- promote mask to an integral number of quadrants / even number of bits
-          | oddity = unsafeShiftL mask 1 .|. 1
-          | otherwise   = mask
-        crit = mask `xor` unsafeShiftR mask 1
+        xi = xor xai xbi
+        xj = xor xaj xbj
+        yj = xor yaj ybj
+        yk = xor yak ybk
+        xiyj = xi .|. yj; ykxj = yk .|. xj
 
-    go21 _ (Mat x) _ yb b = Heap.timesSingleton times (G.stream x) (Key yb) b -- linear scan. use tree and fast rejects?
-    go12 xa a _ (Mat y) _ = Heap.singletonTimes times (Key xa) a (G.stream y)
+    go21 _ mx _ yb b = Heap.timesSingleton times (G.stream (mx^._Mat)) yb b -- linear scan. use tree and fast rejects?
+    go12 xa a _ my _ = Heap.singletonTimes times xa a (G.stream (my^._Mat))
 
     madd Nothing xs = xs
     madd xs Nothing = xs
@@ -372,12 +355,12 @@ multiplyWith times make x0 y0 = case compare (count x0) 1 of
     mfby (Just x) (Just y) = Just (fby x y)
     {-# INLINE mfby #-}
 
-    lo (Mat (H.V k _)) = runKey (U.head k)
+    lo (Mat _ xs ys _) = Key (U.head xs) (U.head ys)
     {-# INLINE lo #-}
 
-    hi (Mat (H.V k _)) = runKey (U.last k)
+    hi (Mat _ xs ys _) = Key (U.last xs) (U.last ys)
     {-# INLINE hi #-}
 
     head :: G.Vector v a => Mat v a -> a
-    head (Mat (H.V _ v)) = G.head v
+    head (Mat _ _ _ vs) = G.head vs
     {-# INLINE head #-}
