@@ -20,9 +20,9 @@
 <a name="line-11"></a><span class='hs-comment'>-- Stability   :  experimental</span>
 <a name="line-12"></a><span class='hs-comment'>-- Portability :  non-portable</span>
 <a name="line-13"></a><span class='hs-comment'>--</span>
-<a name="line-14"></a><span class='hs-comment'>-- Bootstrapped catenable non-empty pairing heaps as described in</span>
+<a name="line-14"></a><span class='hs-comment'>-- Bootstrapped /catenable/ non-empty pairing heaps as described in</span>
 <a name="line-15"></a><span class='hs-comment'>--</span>
-<a name="line-16"></a><span class='hs-comment'>-- &lt;https://www.fpcomplete.com/user/edwardk/revisiting-matrix-multiplication-part-5&gt;</span>
+<a name="line-16"></a><span class='hs-comment'>-- &lt;https://www.fpcomplete.com/user/edwardk/revisiting-matrix-multiplication/part-5&gt;</span>
 <a name="line-17"></a><span class='hs-comment'>-----------------------------------------------------------------------------</span>
 <a name="line-18"></a><span class='hs-keyword'>module</span> <span class='hs-conid'>Sparse</span><span class='hs-varop'>.</span><span class='hs-conid'>Matrix</span><span class='hs-varop'>.</span><span class='hs-conid'>Internal</span><span class='hs-varop'>.</span><span class='hs-conid'>Heap</span>
 <a name="line-19"></a>  <span class='hs-layout'>(</span> <span class='hs-conid'>Heap</span><span class='hs-layout'>(</span><span class='hs-keyglyph'>..</span><span class='hs-layout'>)</span>
@@ -49,7 +49,7 @@
 <a name="line-40"></a><span class='hs-keyword'>import</span> <span class='hs-conid'>Sparse</span><span class='hs-varop'>.</span><span class='hs-conid'>Matrix</span><span class='hs-varop'>.</span><span class='hs-conid'>Internal</span><span class='hs-varop'>.</span><span class='hs-conid'>Key</span>
 <a name="line-41"></a><span class='hs-keyword'>import</span> <span class='hs-conid'>Prelude</span> <span class='hs-varid'>hiding</span> <span class='hs-layout'>(</span><span class='hs-varid'>head</span><span class='hs-layout'>,</span> <span class='hs-varid'>tail</span><span class='hs-layout'>)</span>
 <a name="line-42"></a>
-<a name="line-43"></a><a name="Heap"></a><span class='hs-comment'>-- | Bootstrapped _catenable_ non-empty pairing heaps</span>
+<a name="line-43"></a><a name="Heap"></a><span class='hs-comment'>-- | Bootstrapped catenable non-empty pairing heaps</span>
 <a name="line-44"></a><a name="Heap"></a><span class='hs-keyword'>data</span> <span class='hs-conid'>Heap</span> <span class='hs-varid'>a</span> <span class='hs-keyglyph'>=</span> <span class='hs-conid'>Heap</span> <span class='hs-comment'>{-# UNPACK #-}</span> <span class='hs-varop'>!</span><span class='hs-conid'>Key</span> <span class='hs-varid'>a</span> <span class='hs-keyglyph'>[</span><span class='hs-conid'>Heap</span> <span class='hs-varid'>a</span><span class='hs-keyglyph'>]</span> <span class='hs-keyglyph'>[</span><span class='hs-conid'>Heap</span> <span class='hs-varid'>a</span><span class='hs-keyglyph'>]</span> <span class='hs-keyglyph'>[</span><span class='hs-conid'>Heap</span> <span class='hs-varid'>a</span><span class='hs-keyglyph'>]</span>
 <a name="line-45"></a>  <span class='hs-keyword'>deriving</span> <span class='hs-layout'>(</span><span class='hs-conid'>Show</span><span class='hs-layout'>,</span><span class='hs-conid'>Read</span><span class='hs-layout'>)</span>
 <a name="line-46"></a>
