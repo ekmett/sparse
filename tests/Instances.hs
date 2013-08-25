@@ -12,7 +12,7 @@ import Test.QuickCheck.Arbitrary
 instance Arbitrary Key where
   arbitrary = Key <$> arbitrary <*> arbitrary
 
-instance (G.Vector v a, Arbitrary a) => Arbitrary (Mat v a) where
+instance (Vectored a, Arbitrary a) => Arbitrary (Mat a) where
   arbitrary = S.fromList . M.toList <$> arbitrary
 
 instance (Ord k, Arbitrary k, Arbitrary v) => Arbitrary (Map k v) where

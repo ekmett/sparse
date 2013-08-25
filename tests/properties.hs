@@ -31,10 +31,10 @@ nonEmpty f m = f (fromMaybe M.empty m) <&> \ m -> m <$ guard (not (M.null m))
 sane :: Linear Int -> Linear Int
 sane = M.filter (not . M.null)
 
-toLinear :: Mat U.Vector Int -> Linear Int
+toLinear :: Mat Int -> Linear Int
 toLinear = sane . H.foldr (\(k,v) r -> r & at (k^._1) . nonEmpty . at (k^._2) ?~ v) M.empty . view _Mat
 
-fromLinear :: Linear Int -> Mat U.Vector Int
+fromLinear :: Linear Int -> Mat Int
 fromLinear m = SM.fromList $ do
   (i, n) <- M.toList m
   (j, a) <- M.toList n
@@ -43,7 +43,7 @@ fromLinear m = SM.fromList $ do
 prop_to_from x = toLinear (fromLinear x) == sane x
 prop_from_to x = fromLinear (toLinear x) == x
 
-prop_model :: Mat U.Vector Int -> Mat U.Vector Int -> Gen Prop
+prop_model :: Mat Int -> Mat Int -> Gen Prop
 prop_model x y | z <- x * y, z' <- fromLinear (toLinear x !*! toLinear y)
   = label (show z Prelude.++ " == " Prelude.++ show z') (z == z')
 
