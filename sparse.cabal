@@ -1,6 +1,6 @@
 name:          sparse
 category:      Data, Vector
-version:       0.7
+version:       0.7.0.1
 license:       BSD3
 cabal-version: >= 1.8
 license-file:  LICENSE
@@ -24,17 +24,9 @@ extra-source-files:
 description:
   A playground of sparse linear algebra primitives using Morton ordering
   .
-  The design of this library is describe in the following articles on FP Complete's School of Haskell.
+  The design of this library is described in the series \"Revisiting Matrix Multiplication\" on FP Complete's School of Haskell.
   .
-  1. <https://www.fpcomplete.com/user/edwardk/revisiting-matrix-multiplication-part-1>
-  .
-  2. <https://www.fpcomplete.com/user/edwardk/revisiting-matrix-multiplication-part-2>
-  .
-  3. <https://www.fpcomplete.com/user/edwardk/revisiting-matrix-multiplication-part-3>
-  .
-  4. <https://www.fpcomplete.com/user/edwardk/revisiting-matrix-multiplication-part-4>
-  .
-  5. <https://www.fpcomplete.com/user/edwardk/revisiting-matrix-multiplication-part-5>
+  <https://www.fpcomplete.com/user/edwardk/revisiting-matrix-multiplication/>
 
 source-repository head
   type: git
