@@ -5,7 +5,7 @@ import Data.Array.Unboxed as A
 import Data.Vector.Generic as G
 import Data.Vector.Unboxed as U
 import Sparse.Matrix as M
-import Sparse.Matrix.Heap as Heap
+import Sparse.Matrix.Internal.Heap as Heap
 
 instance NFData (UArray i e)
 
