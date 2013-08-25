@@ -18,6 +18,8 @@ extra-source-files:
   .travis.yml
   .gitignore
   .vim.custom
+  CHANGELOG.markdown
+  README.markdown
 
 description:
   A playground of sparse linear algebra primitives using Morton ordering
