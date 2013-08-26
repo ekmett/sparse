@@ -26,8 +26,6 @@ module Sparse.Matrix.Internal.Heap
   , fromAscList
   , streamHeapWith
   , streamHeapWith0
-  , timesSingleton
-  , singletonTimes
   ) where
 
 import Control.Applicative
@@ -175,37 +173,3 @@ streamHeapWith0 f h0 = Stream step (maybe Finished Start h0) Unknown where
   step Finished = return Done
   {-# INLINE [1] step #-}
 {-# INLINE [0] streamHeapWith0 #-}
-
--- | This is an internal 'Heap' fusion combinator used to multiply on the right by a singleton 'Key'/value pair.
-timesSingleton :: (a -> b -> c) -> Stream Id (Key, a) -> Key -> b -> Maybe (Heap c)
-timesSingleton f (Stream stepa sa0 _) (Key j k) b = start sa0 where
-  start sa = case unId (stepa sa) of
-    Yield (Key i j', a) sa'
-      | j == j'         -> Just $ run (singleton (Key i k) (f a b)) sa'
-      | otherwise       -> start sa'
-    Skip sa' -> start sa'
-    Done     -> Nothing
-  run h sa = case unId (stepa sa) of
-    Yield (Key i j', a) sa'
-      | j == j'   -> run (h `mix` singleton (Key i k) (f a b)) sa'
-      | otherwise -> run h sa'
-    Skip sa' -> run h sa'
-    Done     -> h
-{-# INLINE timesSingleton #-}
-
--- | This is an internal 'Heap' fusion combinator used to multiply on the right by a singleton 'Key'/value pair.
-singletonTimes :: (a -> b -> c) -> Key -> a -> Stream Id (Key, b) -> Maybe (Heap c)
-singletonTimes f (Key i j) a (Stream stepb sb0 _) = start sb0 where
-  start sb = case unId (stepb sb) of
-    Yield (Key j' k, b) sb'
-      | j == j'   -> Just $ run (singleton (Key i k) (f a b)) sb'
-      | otherwise -> start sb'
-    Skip sb' -> start sb'
-    Done     -> Nothing
-  run h sb = case unId (stepb sb) of
-    Yield (Key j' k, b) sb'
-      | j == j'   -> run (h `mix` singleton (Key i k) (f a b)) sb'
-      | otherwise -> run h sb'
-    Skip sb' -> run h sb'
-    Done     -> h
-{-# INLINE singletonTimes #-}
