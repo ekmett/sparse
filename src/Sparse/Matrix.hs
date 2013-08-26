@@ -338,17 +338,19 @@ multiplyWith :: Vectored a => (a -> a -> a) -> (Maybe (Heap a) -> Stream (Key, a
 {-# INLINEABLE multiplyWith #-}
 multiplyWith times make x0 y0 = case compare (size x0) 1 of
   LT -> empty
-  EQ | size y0 == 1 -> _Mat # (G.unstream $ hint $ make $ go11 (lo x0) (head x0) (lo y0) (head y0))
-     | otherwise    -> _Mat # (G.unstream $ hint $ make $ go12 (lo x0) (head x0) (lo y0) y0 (hi y0))
+  EQ | size y0 == 1 -> hinted $ go11 (lo x0) (head x0) (lo y0) (head y0)
+     | otherwise    -> hinted $ go12 (lo x0) (head x0) (lo y0) y0 (hi y0)
   GT -> case compare (size y0) 1 of
       LT -> empty
-      EQ -> _Mat # (G.unstream $ hint $ make $ go21 (lo x0) x0 (hi x0) (lo y0) (head y0))
-      GT -> _Mat # (G.unstream $ hint $ make $ go22 (lo x0) x0 (hi x0) (lo y0) y0 (hi y0))
+      EQ -> hinted $ go21 (lo x0) x0 (hi x0) (lo y0) (head y0)
+      GT -> hinted $ go22 (lo x0) x0 (hi x0) (lo y0) y0 (hi y0)
   where
-    hint x = sized x $ Max (size x0 * size y0)
+    hinted x = _Mat # G.unstream (sized (make x) (Max (size x0 * size y0)))
+
     go11 (Key i j) a (Key j' k) b
        | j == j' = Just $ Heap.singleton (Key i k) (times a b)
        | otherwise = Nothing
+    {-# INLINE go11 #-}
 
     -- internal cases in go22
     go22L0 xa x ya y yb
@@ -387,24 +389,53 @@ multiplyWith times make x0 y0 = case compare (size x0) 1 of
         xiyj = xi .|. yj
         ykxj = yk .|. xj
 
-    go21 _ mx _ yb b = Heap.timesSingleton times (G.stream (mx^._Mat)) yb b -- linear scan. use tree and fast rejects?
-    go12 xa a _ my _ = Heap.singletonTimes times xa a (G.stream (my^._Mat))
+    -- internal cases in go21
+    go21L0 xa x yb b
+      | size x == 1 = go11 xa (head x) yb b
+      | otherwise    = go21 xa x (hi x) yb b
+    {-# INLINE go21L0 #-}
+
+    go21L1 x xb yb b
+      | size x == 1 = go11 xb (head x) yb b
+      | otherwise    = go21 (lo x) x xb yb b
+    {-# INLINE go21L1 #-}
+
+    go21 xa@(Key xai xaj) x xb@(Key xbi xbj) yb@(Key ybj _ybk) b
+      | gts (xor xaj ybj) (xi.|.xj) = Nothing
+      | ges xi xj = case split1 xai xbi x of (m0,m1) -> go21L0 xa m0 yb b `mfby` go21L1 m1 xb yb b -- we can split on i, fby
+      | otherwise = case split2 xaj xbj x of (m0,m1) -> go21L0 xa m0 yb b `madd` go21L1 m1 xb yb b -- we split on j, mix
+      where
+        xi = xor xai xbi
+        xj = xor xaj xbj
+
+    go12R0 xa a ya y
+      | size y == 1 = go11 xa a ya (head y)
+      | otherwise   = go12 xa a ya y (hi y)
+    {-# INLINE go12R0 #-}
+
+    go12R1 xa a y yb
+      | size y == 1 = go11 xa a yb (head y)
+      | otherwise   = go12 xa a (lo y) y yb
+    {-# INLINE go12R1 #-}
+
+    go12 xa@(Key _xai xaj) a ya@(Key yaj yak) y yb@(Key ybj ybk)
+      | gts (xor xaj yaj) (yj.|.yk) = Nothing
+      | ges yj yk = case split1 yaj ybj y of (m0,m1) -> go12R0 xa a ya m0 `madd` go12R1 xa a m1 yb -- we had to split on j, mix
+      | otherwise = case split2 yak ybk y of (m0,m1) -> go12R0 xa a ya m0 `mfby` go12R1 xa a m1 yb -- we can split on k, fby
+      where
+        yj = xor yaj ybj
+        yk = xor yak ybk
 
     madd Nothing xs = xs
     madd xs Nothing = xs
     madd (Just x) (Just y) = Just (mix x y)
-    {-# INLINE madd #-}
 
     mfby Nothing xs = xs
     mfby xs Nothing = xs
     mfby (Just x) (Just y) = Just (fby x y)
-    {-# INLINE mfby #-}
 
     lo (Mat _ xs ys _) = Key (U.head xs) (U.head ys)
-    {-# INLINE lo #-}
 
     hi (Mat _ xs ys _) = Key (U.last xs) (U.last ys)
-    {-# INLINE hi #-}
 
     head (Mat _ _ _ vs) = G.head vs
-    {-# INLINE head #-}
