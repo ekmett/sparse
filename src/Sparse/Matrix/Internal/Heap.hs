@@ -34,7 +34,6 @@ import Data.Foldable
 import Data.Monoid
 import Data.Vector.Fusion.Stream.Monadic hiding (singleton, fromList, head, tail)
 import Data.Vector.Fusion.Stream.Size
-import Data.Vector.Fusion.Util
 import Sparse.Matrix.Internal.Key
 import Prelude hiding (head, tail)
 
