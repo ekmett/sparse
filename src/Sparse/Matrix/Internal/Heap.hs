@@ -94,14 +94,20 @@ fbys (Heap i a as ls rs) ls' rs' = Heap i a as ls $ rs' <> reverse ls' <> rs
 
 pops :: [Heap a] -> [Heap a] -> [Heap a] -> [Heap a]
 pops xs     []     [] = xs
-pops (x:xs) ls     rs = [fbys (Prelude.foldl mix x xs) ls rs]
+pops (x:xs) ls     rs = [fbys (merge x xs) ls rs]
 pops []     (l:ls) rs = [fbys l ls rs]
 pops []     []     rs = case reverse rs of
   f:fs -> [fbys f fs []]
   _    -> [] -- caught above by the 'go as [] []' case
 
+merge :: Heap a -> [Heap a] -> Heap a
+merge x (y:ys) = case ys of
+  (z:zs) -> mix x y `mix` merge z zs
+  []     -> mix x y
+merge x [] = x
+
 pop :: [Heap a] -> [Heap a] -> [Heap a] -> Maybe (Heap a)
-pop (x:xs) ls     rs = Just $ fbys (Prelude.foldl mix x xs) ls rs
+pop (x:xs) ls     rs = Just $ fbys (merge x xs) ls rs
 pop []     (l:ls) rs = Just $ fbys l ls rs
 pop []     []     rs = case reverse rs of
   f:fs -> Just (fbys f fs [])
