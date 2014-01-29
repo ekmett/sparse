@@ -1,6 +1,6 @@
 name:          sparse
 category:      Data, Vector
-version:       0.8
+version:       0.9
 license:       BSD3
 cabal-version: >= 1.8
 license-file:  LICENSE
@@ -62,7 +62,7 @@ library
     contravariant     >= 0.4.2 && < 1,
     deepseq           >= 1.1   && < 1.4,
     hybrid-vectors    >= 0.1   && < 1,
-    lens              >= 3.9   && < 3.10,
+    lens              >= 4     && < 5,
     primitive         >= 0.5   && < 0.6,
     transformers      >= 0.3   && < 0.4,
     vector            >= 0.10  && < 0.11,

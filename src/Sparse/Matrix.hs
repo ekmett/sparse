@@ -193,17 +193,14 @@ type instance Index (Mat a) = Key
 eachV :: (Applicative f, G.Vector v a, G.Vector v b) => (a -> f b) -> v a -> f (v b)
 eachV f v = G.fromListN (G.length v) <$> traverse f (G.toList v)
 
-instance (Applicative f, Arrayed a, a ~ b) => Each f (Mat a) (Mat b) a b where
-  each f = _Mat $ eachV $ \(k,v) -> (,) k <$> indexed f k v
+instance (Arrayed a, a ~ b) => Each (Mat a) (Mat b) a b where
+  each f = _Mat $ eachV $ \(k,v) -> (,) k <$> f v
   {-# INLINE each #-}
 
-instance (Functor f, Contravariant f, Arrayed a) => Contains f (Mat a) where
-  contains = containsIx
-
-instance (Applicative f, Arrayed a) => Ixed f (Mat a) where
+instance Arrayed a => Ixed (Mat a) where
   ix ij@(Key i j) f m@(Mat n xs ys vs)
     | Just i' <- xs U.!? l, i == i'
-    , Just j' <- ys U.!? l, j == j' = indexed f ij (vs G.! l) <&> \v -> Mat n xs ys (vs G.// [(l,v)])
+    , Just j' <- ys U.!? l, j == j' = f (vs G.! l) <&> \v -> Mat n xs ys (vs G.// [(l,v)])
     | otherwise = pure m
     where l = search (\k -> Key (xs U.! k) (ys U.! k) >= ij) 0 n
   {-# INLINE ix #-}
