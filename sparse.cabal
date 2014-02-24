@@ -141,7 +141,7 @@ test-suite doctests
       containers,
       directory      >= 1.0,
       deepseq,
-      doctest        >= 0.9.1,
+      doctest        >= 0.9.10,
       filepath,
       mtl,
       semigroups     >= 0.9,
