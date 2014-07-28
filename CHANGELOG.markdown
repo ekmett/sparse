@@ -1,3 +1,7 @@
+0.9.1
+-----
+* `contravariant 1` support
+
 0.9
 ---
 * `lens 4` support
