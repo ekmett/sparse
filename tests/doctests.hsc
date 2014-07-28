@@ -54,9 +54,6 @@ withUnicode m = m
 main :: IO ()
 main = withUnicode $ getSources >>= \sources -> doctest $
     "-isrc"
-  : "-idist/build/autogen"
-  : "-optP-include"
-  : "-optPdist/build/autogen/cabal_macros.h"
   : "-hide-all-packages"
   : map ("-package="++) deps ++ sources
 
