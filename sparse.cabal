@@ -59,7 +59,7 @@ flag llvm
 library
   build-depends:
     base              >= 4     && < 5,
-    contravariant     >= 0.4.2 && < 1,
+    contravariant     >= 0.4.2 && < 2,
     deepseq           >= 1.1   && < 1.4,
     hybrid-vectors    >= 0.1   && < 1,
     lens              >= 4     && < 5,

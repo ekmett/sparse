@@ -1,3 +1,7 @@
+0.9
+---
+* `lens 4` support
+
 0.7.0.1
 -------
 * Consolidated the tutorial under on "slug" on the FP Complete site, this broke all of the URLs in the 0.7 documentation.
