@@ -60,7 +60,7 @@ library
   build-depends:
     base              >= 4     && < 5,
     contravariant     >= 1     && < 2,
-    deepseq           >= 1.1   && < 1.4,
+    deepseq           >= 1.1   && < 1.5,
     hybrid-vectors    >= 0.1   && < 1,
     lens              >= 4     && < 5,
     primitive         >= 0.5   && < 0.6,
