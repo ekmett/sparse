@@ -175,12 +175,12 @@ _Mat = iso (\(Mat n xs ys vs) -> H.V (V_Key n xs ys) vs)
            (\(H.V (V_Key n xs ys) vs) -> Mat n xs ys vs)
 {-# INLINE _Mat #-}
 
--- | Access the keys of a matrix
+-- | Access the keys of the non-zero entries of our matrix
 keys :: Lens' (Mat a) (U.Vector Key)
 keys f (Mat n xs ys vs) = f (V_Key n xs ys) <&> \ (V_Key n' xs' ys') -> Mat n' xs' ys' vs
 {-# INLINE keys #-}
 
--- | Access the keys of a matrix
+-- | Access the values of the non-zero entries of our matrix
 values :: Lens (Mat a) (Mat b) (I.Array a) (I.Array b)
 values f (Mat n xs ys vs) = Mat n xs ys <$> f vs
 {-# INLINE values #-}
