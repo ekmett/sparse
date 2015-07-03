@@ -336,14 +336,15 @@ multiplyWith :: Arrayed a => (a -> a -> a) -> (Maybe (Heap a) -> Stream (Key, a)
 multiplyWith times make x0 y0 = case compare (size x0) 1 of
   LT -> empty
   EQ | size y0 == 0 -> empty
-     | size y0 == 1 -> hinted $ go11 (lo x0) (head x0) (lo y0) (head y0)
-     | otherwise    -> hinted $ go12 (lo x0) (head x0) (lo y0) y0 (hi y0)
+     | size y0 == 1 -> unhinted $ go11 (lo x0) (head x0) (lo y0) (head y0)
+     | otherwise    -> unhinted $ go12 (lo x0) (head x0) (lo y0) y0 (hi y0)
   GT -> case compare (size y0) 1 of
       LT -> empty
-      EQ -> hinted $ go21 (lo x0) x0 (hi x0) (lo y0) (head y0)
-      GT -> hinted $ go22 (lo x0) x0 (hi x0) (lo y0) y0 (hi y0)
+      EQ -> unhinted $ go21 (lo x0) x0 (hi x0) (lo y0) (head y0)
+      GT -> unhinted $ go22 (lo x0) x0 (hi x0) (lo y0) y0 (hi y0)
   where
-    hinted x = _Mat # G.unstream (sized (make x) (Max (size x0 * size y0)))
+    -- hinted x = _Mat # G.unstream (sized (make x) (Max (size x0 * size y0)))
+    unhinted x = _Mat # G.unstream (make x)
 
     go11 (Key i j) a (Key j' k) b
        | j == j' = Just $ Heap.singleton (Key i k) (times a b)
