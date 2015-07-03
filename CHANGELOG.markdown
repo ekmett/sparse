@@ -1,3 +1,8 @@
+0.9.2
+-----
+* Rather dramatic memory usage reduction.
+* Dependency bumps
+
 0.9.1
 -----
 * `contravariant 1` support
