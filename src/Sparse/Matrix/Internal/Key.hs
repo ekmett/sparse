@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE DefaultSignatures #-}
 {-# LANGUAGE FlexibleInstances #-}
@@ -48,7 +49,9 @@ import Control.Lens
 import qualified Data.Vector.Generic as G
 import qualified Data.Vector.Generic.Mutable as GM
 import qualified Data.Vector.Unboxed as U
+#if __GLASGOW_HASKELL__ < 710
 import Data.Word
+#endif
 
 -- * Morton Order
 

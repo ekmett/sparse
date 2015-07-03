@@ -19,7 +19,9 @@ module Sparse.Matrix.Internal.Array
 import Control.Monad
 import Data.Complex
 import Data.Int
+#if __GLASGOW_HASKELL__ < 710
 import Data.Monoid
+#endif
 import qualified Data.Vector.Generic as G
 import qualified Data.Vector.Generic.Mutable as GM
 import qualified Data.Vector.Unboxed as U

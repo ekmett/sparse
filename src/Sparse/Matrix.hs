@@ -67,8 +67,7 @@ import qualified Data.Vector.Generic as G
 import qualified Data.Vector.Hybrid as H
 import qualified Data.Vector.Hybrid.Internal as H
 import qualified Data.Vector.Unboxed as U
-import Data.Vector.Fusion.Stream (Stream, sized)
-import Data.Vector.Fusion.Stream.Size
+import Data.Vector.Fusion.Stream (Stream)
 import Data.Word
 import Prelude hiding (head, last, null)
 import Sparse.Matrix.Internal.Fusion as Fusion
