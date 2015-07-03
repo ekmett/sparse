@@ -147,9 +147,6 @@ test-suite doctests
       semigroups     >= 0.9,
       simple-reflect >= 0.3.1
 
-  if impl(ghc<7.6.1)
-    ghc-options: -Werror
-
 -- matrix-matrix multiplication
 benchmark mm
   type:           exitcode-stdio-1.0
